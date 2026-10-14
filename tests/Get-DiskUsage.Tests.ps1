@@ -1,21 +1,78 @@
-﻿Describe "Get-DiskUsage calculations" {
-    It "calculates used space correctly" {
-        $size = 100GB
-        $free = 25GB
-        $used = $size - $free
+﻿
+$diskScript = Join-Path $PSScriptRoot "..\scripts\Get-DiskUsage.ps1"
 
-        $usedGB = [math]::Round($used / 1GB, 2)
-        $usedPercent = [math]::Round(($used / $size) * 100, 2)
+Describe "Get-DiskUsage script behavior" {
+    It "returns Healthy for a disk below the warning threshold" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter { $ClassName -eq "Win32_LogicalDisk" }
 
-        $usedGB | Should Be 75
-        $usedPercent | Should Be 75
+        $result = @(& $diskScript)
+
+        $result.Count | Should Be 1
+        $result[0].Drive | Should Be "X:"
+        $result[0].UsedGB | Should Be 70
+        $result[0].UsedPercent | Should Be 70
+        $result[0].HealthStatus | Should Be "Healthy"
     }
 
-    It "handles a completely free drive" {
-        $size = 100GB
-        $free = 100GB
-        $usedPercent = [math]::Round((($size - $free) / $size) * 100, 2)
+    It "returns Warning at the warning threshold" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 20GB
+            }
+        } -ParameterFilter { $ClassName -eq "Win32_LogicalDisk" }
 
-        $usedPercent | Should Be 0
+        $result = @(& $diskScript)
+
+        $result[0].UsedPercent | Should Be 80
+        $result[0].HealthStatus | Should Be "Warning"
+    }
+
+    It "returns Critical at the critical threshold" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 10GB
+            }
+        } -ParameterFilter { $ClassName -eq "Win32_LogicalDisk" }
+
+        $result = @(& $diskScript)
+
+        $result[0].UsedPercent | Should Be 90
+        $result[0].HealthStatus | Should Be "Critical"
+    }
+
+    It "supports custom thresholds" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 25GB
+            }
+        } -ParameterFilter { $ClassName -eq "Win32_LogicalDisk" }
+
+        $result = @(
+            & $diskScript -WarningThreshold 70 -CriticalThreshold 85
+        )
+
+        $result[0].HealthStatus | Should Be "Warning"
+    }
+
+    It "rejects invalid threshold ordering" {
+        {
+            & $diskScript -WarningThreshold 90 -CriticalThreshold 80
+        } | Should Throw
     }
 }

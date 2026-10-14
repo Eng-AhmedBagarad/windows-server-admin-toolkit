@@ -1,0 +1,250 @@
+﻿# User Guide — Windows Server Administration Toolkit
+
+This guide explains how to run the toolkit's PowerShell scripts, interpret their output, and troubleshoot common problems.
+
+## 1. Requirements
+
+- Windows 10/11 or a supported Windows Server version.
+- Windows PowerShell 5.1 for the currently tested environment.
+- Access to the project files.
+- Permission to query the system information required by each check.
+- Pester 3.4.0 or a compatible version for running the existing test suite.
+
+The scripts are diagnostic tools. Run them on the computer you want to inspect.
+
+## 2. Get Started
+
+Download or clone the repository, then open PowerShell in the project directory.
+
+For an existing local copy:
+
+```powershell
+Set-Location C:\Projects\windows-server-admin-toolkit
+```
+
+Review the available scripts:
+
+```powershell
+Get-ChildItem .\scripts\*.ps1
+```
+
+If Windows blocks a script because of execution policy, first check the policy:
+
+```powershell
+Get-ExecutionPolicy -List
+```
+
+If your organization's policy permits it, you can run a script in a temporary PowerShell process with a process-scoped bypass:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Get-DiskUsage.ps1"
+```
+
+This does not permanently change the machine's execution policy. Follow your organization's security policy; do not bypass organizational restrictions.
+
+## 3. Check Disk Capacity
+
+Run:
+
+```powershell
+.\scripts\Get-DiskUsage.ps1
+```
+
+The script checks local fixed disks and returns structured objects containing:
+
+- `Drive`: drive letter.
+- `VolumeName`: volume label.
+- `TotalGB`: total capacity in GB.
+- `UsedGB`: used capacity in GB.
+- `FreeGB`: available capacity in GB.
+- `UsedPercent`: percentage of capacity in use.
+- `HealthStatus`: `Healthy`, `Warning`, or `Critical`.
+
+### Default thresholds
+
+| Used capacity | Status |
+| --- | --- |
+| Below 80% | Healthy |
+| 80% to below 90% | Warning |
+| 90% or above | Critical |
+
+### Customize thresholds
+
+```powershell
+.\scripts\Get-DiskUsage.ps1 -WarningThreshold 70 -CriticalThreshold 85
+```
+
+The critical threshold must be greater than the warning threshold. Both values must be between 0 and 100.
+
+### Use the results in PowerShell
+
+```powershell
+$disks = .\scripts\Get-DiskUsage.ps1
+
+$disks | Format-Table Drive, TotalGB, FreeGB, UsedPercent, HealthStatus -AutoSize
+```
+
+To show only disks that need attention:
+
+```powershell
+$disks | Where-Object {
+    $_.HealthStatus -ne "Healthy"
+} | Format-Table Drive, FreeGB, UsedPercent, HealthStatus -AutoSize
+```
+
+If no local fixed disks are found, the script issues a warning. Disks with invalid capacity information are skipped.
+
+## 4. Run the Complete Server Health Report
+
+Run:
+
+```powershell
+.\scripts\Get-ServerHealth.ps1
+```
+
+The report includes:
+
+- Computer name, Windows edition, version, and uptime.
+- CPU utilization based on performance-counter samples.
+- RAM usage and available memory.
+- Local fixed-disk capacity and status.
+- Status of selected Windows services.
+- An overall health status.
+
+### Overall health status
+
+- `Critical`: at least one reported check is critical.
+- `Warning`: no critical check was found, but at least one check raised a warning.
+- `Unknown`: no critical or warning status was found, but at least one check could not be confirmed.
+- `Healthy`: all evaluated checks reported healthy.
+
+A critical status takes precedence over warning and unknown statuses.
+
+### Customize thresholds
+
+```powershell
+.\scripts\Get-ServerHealth.ps1 `
+    -CPUWarningThreshold 70 `
+    -CPUCriticalThreshold 90 `
+    -RAMWarningThreshold 75 `
+    -RAMCriticalThreshold 90 `
+    -DiskWarningThreshold 80 `
+    -DiskCriticalThreshold 90
+```
+
+Each critical threshold must be greater than its corresponding warning threshold.
+
+### Select which services to check
+
+By default, the script checks `EventLog`, `LanmanServer`, and `Dnscache`.
+
+To check different services:
+
+```powershell
+.\scripts\Get-ServerHealth.ps1 -ServiceName "EventLog","Spooler"
+```
+
+A service that is running is reported as healthy. A found service that is not running is reported as a warning. A service that cannot be found is reported as unknown.
+
+Choose services appropriate for the server's role. A stopped service is not necessarily a fault if it is optional or intentionally disabled.
+
+### Return structured data
+
+Use `-AsObject` when another PowerShell command or script needs to consume the report:
+
+```powershell
+$report = .\scripts\Get-ServerHealth.ps1 -AsObject
+
+$report.OverallStatus
+$report.System
+$report.Resources
+$report.Disks
+$report.Services
+```
+
+Display the disk results:
+
+```powershell
+$report.Disks |
+    Format-Table Drive, UsedPercent, HealthStatus -AutoSize
+```
+
+Display services that are not healthy:
+
+```powershell
+$report.Services |
+    Where-Object { $_.HealthStatus -ne "Healthy" } |
+    Format-Table ServiceName, Status, HealthStatus -AutoSize
+```
+
+The `-AsObject` option returns the report object rather than the formatted console report.
+
+## 5. Run the Tests
+
+From the repository root, run the full test suite:
+
+```powershell
+Invoke-Pester .\tests
+```
+
+To run only disk-monitoring tests:
+
+```powershell
+Invoke-Pester .\tests\Get-DiskUsage.Tests.ps1
+```
+
+To run only server-health tests:
+
+```powershell
+Invoke-Pester .\tests\Get-ServerHealth.Tests.ps1
+```
+
+Install Pester only if it is not already available and you are authorized to install PowerShell modules. The current test suite was validated with Pester 3.4.0.
+
+Tests use mocked system data for repeatable checks. Passing tests does not by itself certify every Windows version or production environment.
+
+## 6. Troubleshooting
+
+### Access denied or collection errors
+
+- Run PowerShell under an account with the necessary permissions.
+- Try an elevated PowerShell session only if required and authorized.
+- Check whether Windows performance counters and CIM queries are available.
+- Review the full error message before changing permissions.
+
+### CPU data is unavailable
+
+The health script uses the Windows Processor performance counter. If collection fails, it issues a warning and reports CPU status as `Unknown`. Investigate performance-counter availability on the target machine.
+
+### Disk data is unavailable
+
+Confirm that Windows can query local fixed disks through CIM. The health report treats missing disk results as an unknown health condition.
+
+### A service is missing or stopped
+
+Check the service name and the server's intended role. Missing services are reported as `Unknown`; stopped services are reported as `Warning`. Review the result rather than automatically starting a service.
+
+### The overall status is Critical
+
+Inspect the individual CPU, RAM, disk, and service results to identify the check responsible for the status. For disk warnings or critical results, review free capacity and investigate disk usage before deleting files.
+
+## 7. Safety and Limitations
+
+- These scripts are intended for read-only diagnostics.
+- They do not intentionally change system configuration.
+- The health report depends on the availability of Windows CIM and performance-counter data.
+- Default service checks are examples, not universal requirements for every server role.
+- Health thresholds are configurable indicators; they should be adjusted to the workload and operational requirements.
+- Validate results in your own environment before relying on them for production monitoring.
+- The current `scripts` directory contains disk-capacity and server-health scripts. Other capabilities mentioned in the project overview may not yet have an implementation.
+
+## 8. Common Commands
+
+| Task | Command |
+| --- | --- |
+| Check disks | `.\scripts\Get-DiskUsage.ps1` |
+| Check server health | `.\scripts\Get-ServerHealth.ps1` |
+| Get a structured report | `.\scripts\Get-ServerHealth.ps1 -AsObject` |
+| Check selected services | `.\scripts\Get-ServerHealth.ps1 -ServiceName "EventLog","Spooler"` |
+| Run all tests | `Invoke-Pester .\tests` |
+

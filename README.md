@@ -10,7 +10,7 @@ Provide reliable, reusable, and maintainable tools that help IT administrators m
 
 - **Storage Monitoring:** Report disk capacity, available space, and utilization percentages.
 - **Server Health Assessment:** Collect operating system information, uptime, and selected service status.
-- **Network Diagnostics:** Test DNS resolution and network connectivity.
+- **Network Diagnostics:** Planned; not yet implemented.
 - **Operational Reporting:** Generate structured, timestamped reports for troubleshooting and operational review.
 - **Error Handling:** Handle common failures, inaccessible resources, and insufficient permissions with actionable messages.
 - **Validation:** Include repeatable tests and documented expected results.
@@ -50,3 +50,8 @@ Active development. Features, compatibility, known limitations, and validation r
 ## License
 
 To be determined before public distribution.
+
+## Usage
+
+See the [User Guide](docs/USAGE.md) for prerequisites, installation instructions, script examples, configurable thresholds, health-status interpretation, troubleshooting, and test execution.
+

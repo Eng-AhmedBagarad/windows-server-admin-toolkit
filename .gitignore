@@ -1,0 +1,14 @@
+﻿# Generated reports and logs
+reports/*
+!reports/.gitkeep
+*.log
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.secret
+secrets/
+
+# PowerShell editor files
+.vscode/

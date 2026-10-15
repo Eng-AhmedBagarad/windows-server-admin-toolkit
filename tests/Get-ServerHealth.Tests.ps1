@@ -133,4 +133,79 @@ Describe "Get-ServerHealth script behavior" {
                 -CPUCriticalThreshold 90
         } | Should Throw
     }
+
+    It "exports a complete JSON report" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter {
+            $ClassName -eq "Win32_LogicalDisk"
+        }
+
+        $jsonPath = Join-Path $env:TEMP (
+            "health-report-" + [guid]::NewGuid().ToString("N") + ".json"
+        )
+
+        try {
+            & $healthScript -ExportJsonPath $jsonPath | Out-Null
+
+            Test-Path $jsonPath | Should Be $true
+
+            $exported = Get-Content $jsonPath -Raw | ConvertFrom-Json
+
+            $exported.System.ComputerName | Should Be "TEST-SERVER"
+            $exported.Resources.Count | Should Be 2
+            $exported.Disks.Count | Should Be 1
+            $exported.Disks[0].HealthStatus | Should Be "Healthy"
+        }
+        finally {
+            Remove-Item $jsonPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "exports CSV rows for resources, disks, and services" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter {
+            $ClassName -eq "Win32_LogicalDisk"
+        }
+
+        $csvPath = Join-Path $env:TEMP (
+            "health-report-" + [guid]::NewGuid().ToString("N") + ".csv"
+        )
+
+        try {
+            & $healthScript -ExportCsvPath $csvPath | Out-Null
+
+            Test-Path $csvPath | Should Be $true
+
+            $rows = @(Import-Csv $csvPath)
+
+            ($rows | Where-Object { $_.Category -eq "Resource" }).Count |
+                Should Be 2
+
+
+            @($rows | Where-Object { $_.Category -eq "Disk" }).Count |
+                Should Be 1
+
+            ($rows | Where-Object { $_.Category -eq "Service" }).Count |
+                Should Be 3
+
+            @($rows | Where-Object { $_.Category -eq "Overall" }).Count |
+                Should Be 1
+        }
+        finally {
+            Remove-Item $csvPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
 }

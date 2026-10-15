@@ -30,7 +30,10 @@ param(
 
     [string[]]$ServiceName = @("EventLog", "LanmanServer", "Dnscache"),
 
-    [switch]$AsObject
+    [switch]$AsObject,
+
+    [string]$ExportJsonPath,
+    [string]$ExportCsvPath
 )
 
 $thresholdPairs = @(
@@ -222,6 +225,99 @@ $report = [PSCustomObject]@{
     Disks = $disks
     Services = @($services)
 }
+
+# Export the complete report as JSON.
+if (-not [string]::IsNullOrWhiteSpace($ExportJsonPath)) {
+    $jsonDirectory = Split-Path -Parent $ExportJsonPath
+
+    if ($jsonDirectory -and -not (Test-Path -LiteralPath $jsonDirectory -PathType Container)) {
+        throw "JSON export directory does not exist: $jsonDirectory"
+    }
+
+    $report |
+        ConvertTo-Json -Depth 6 |
+        Set-Content -LiteralPath $ExportJsonPath -Encoding UTF8 -ErrorAction Stop
+
+    Write-Verbose "JSON report saved to: $ExportJsonPath"
+}
+
+# Export a flat table as CSV for Excel and reporting tools.
+if (-not [string]::IsNullOrWhiteSpace($ExportCsvPath)) {
+    $csvDirectory = Split-Path -Parent $ExportCsvPath
+
+    if ($csvDirectory -and -not (Test-Path -LiteralPath $csvDirectory -PathType Container)) {
+        throw "CSV export directory does not exist: $csvDirectory"
+    }
+
+    $csvRows = @()
+
+    $csvRows += [PSCustomObject]@{
+        GeneratedAt = $report.GeneratedAt
+        ComputerName = $system.ComputerName
+        OverallStatus = $report.OverallStatus
+        Category = "Overall"
+        Name = "Overall Health"
+        Status = $report.OverallStatus
+        UsagePercent = $null
+        Details = ""
+    }
+
+    $csvRows += [PSCustomObject]@{
+        GeneratedAt = $report.GeneratedAt
+        ComputerName = $system.ComputerName
+        OverallStatus = $report.OverallStatus
+        Category = "System"
+        Name = $system.OperatingSystem
+        Status = "Information"
+        UsagePercent = $null
+        Details = "Version=$($system.Version); UptimeDays=$($system.UptimeDays)"
+    }
+
+    foreach ($resource in $resources) {
+        $csvRows += [PSCustomObject]@{
+            GeneratedAt = $report.GeneratedAt
+            ComputerName = $system.ComputerName
+            OverallStatus = $report.OverallStatus
+            Category = "Resource"
+            Name = $resource.Resource
+            Status = $resource.HealthStatus
+            UsagePercent = $resource.UsagePercent
+            Details = ""
+        }
+    }
+
+    foreach ($disk in $disks) {
+        $csvRows += [PSCustomObject]@{
+            GeneratedAt = $report.GeneratedAt
+            ComputerName = $system.ComputerName
+            OverallStatus = $report.OverallStatus
+            Category = "Disk"
+            Name = $disk.Drive
+            Status = $disk.HealthStatus
+            UsagePercent = $disk.UsedPercent
+            Details = "TotalGB=$($disk.TotalGB); FreeGB=$($disk.FreeGB)"
+        }
+    }
+
+    foreach ($service in $services) {
+        $csvRows += [PSCustomObject]@{
+            GeneratedAt = $report.GeneratedAt
+            ComputerName = $system.ComputerName
+            OverallStatus = $report.OverallStatus
+            Category = "Service"
+            Name = $service.ServiceName
+            Status = $service.HealthStatus
+            UsagePercent = $null
+            Details = "ServiceStatus=$($service.Status)"
+        }
+    }
+
+    $csvRows |
+        Export-Csv -LiteralPath $ExportCsvPath -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
+
+    Write-Verbose "CSV report saved to: $ExportCsvPath"
+}
+
 
 if ($AsObject) {
     $report

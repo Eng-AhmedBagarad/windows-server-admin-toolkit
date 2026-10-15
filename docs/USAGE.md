@@ -1,4 +1,4 @@
-﻿# User Guide — Windows Server Administration Toolkit
+# User Guide — Windows Server Administration Toolkit
 
 This guide explains how to run the toolkit's PowerShell scripts, interpret their output, and troubleshoot common problems.
 
@@ -179,7 +179,58 @@ $report.Services |
 
 The `-AsObject` option returns the report object rather than the formatted console report.
 
-## 5. Run the Tests
+## 5. Export Reports
+
+The server health script can save reports as JSON, CSV, or both. Exporting is optional; without export parameters, the script displays its normal console report.
+
+Create an output directory if needed:
+
+```powershell
+New-Item -ItemType Directory -Path .\reports -Force
+```
+
+Export both formats:
+
+```powershell
+.\scripts\Get-ServerHealth.ps1 `
+    -ExportJsonPath ".\reports\health-report.json" `
+    -ExportCsvPath ".\reports\health-report.csv"
+```
+
+**JSON** preserves the complete nested report, including overall status, system information, CPU and RAM resources, disks, and services.
+
+**CSV** provides a flat table suitable for Excel and other reporting tools. It includes overall health, system information, resources, each disk, and each selected service.
+
+The output directory must already exist. The script does not create it automatically.
+
+Use `-Verbose` to display messages confirming where reports were saved.
+
+Read the JSON report:
+
+```powershell
+$report = Get-Content .\reports\health-report.json -Raw |
+    ConvertFrom-Json
+
+$report.OverallStatus
+$report.Disks |
+    Format-Table Drive, UsedPercent, HealthStatus -AutoSize
+```
+
+Read the CSV report:
+
+```powershell
+Import-Csv .\reports\health-report.csv |
+    Format-Table Category, Name, Status, UsagePercent -AutoSize
+```
+
+You can also export JSON while returning the report as an object:
+
+```powershell
+$report = .\scripts\Get-ServerHealth.ps1 `
+    -AsObject `
+    -ExportJsonPath ".\reports\health-report.json"
+```
+## 6. Run the Tests
 
 From the repository root, run the full test suite:
 
@@ -203,7 +254,7 @@ Install Pester only if it is not already available and you are authorized to ins
 
 Tests use mocked system data for repeatable checks. Passing tests does not by itself certify every Windows version or production environment.
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 ### Access denied or collection errors
 
@@ -228,7 +279,7 @@ Check the service name and the server's intended role. Missing services are repo
 
 Inspect the individual CPU, RAM, disk, and service results to identify the check responsible for the status. For disk warnings or critical results, review free capacity and investigate disk usage before deleting files.
 
-## 7. Safety and Limitations
+## 8. Safety and Limitations
 
 - These scripts are intended for read-only diagnostics.
 - They do not intentionally change system configuration.
@@ -238,7 +289,7 @@ Inspect the individual CPU, RAM, disk, and service results to identify the check
 - Validate results in your own environment before relying on them for production monitoring.
 - The current `scripts` directory contains disk-capacity and server-health scripts. Other capabilities mentioned in the project overview may not yet have an implementation.
 
-## 8. Common Commands
+## 9. Common Commands
 
 | Task | Command |
 | --- | --- |
@@ -247,4 +298,3 @@ Inspect the individual CPU, RAM, disk, and service results to identify the check
 | Get a structured report | `.\scripts\Get-ServerHealth.ps1 -AsObject` |
 | Check selected services | `.\scripts\Get-ServerHealth.ps1 -ServiceName "EventLog","Spooler"` |
 | Run all tests | `Invoke-Pester .\tests` |
-

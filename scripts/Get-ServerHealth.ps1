@@ -33,7 +33,8 @@ param(
     [switch]$AsObject,
 
     [string]$ExportJsonPath,
-    [string]$ExportCsvPath
+    [string]$ExportCsvPath,
+    [string]$ExportHtmlPath
 )
 
 $thresholdPairs = @(
@@ -318,6 +319,38 @@ if (-not [string]::IsNullOrWhiteSpace($ExportCsvPath)) {
     Write-Verbose "CSV report saved to: $ExportCsvPath"
 }
 
+
+
+if ($ExportHtmlPath) {
+    $htmlStyle = @"
+<meta http-equiv="refresh" content="300">
+<style>
+body { font-family: Arial; margin: 30px; color: #222; }
+h1, h2 { color: #174a7e; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+th { background: #174a7e; color: white; }
+tr:nth-child(even) { background: #f2f2f2; }
+</style>
+"@
+
+    $html = @()
+    $html += "<h1>Server Health Report</h1>"
+    $html += "<p>Generated: $($report.GeneratedAt)</p>"
+    $html += "<h2>Overall Status: $($report.OverallStatus)</h2>"
+    $html += "<h2>System Information</h2>"
+    $html += ($report.System | ConvertTo-Html -Fragment)
+    $html += "<h2>Resources</h2>"
+    $html += ($report.Resources | ConvertTo-Html -Fragment)
+    $html += "<h2>Disks</h2>"
+    $html += ($report.Disks | ConvertTo-Html -Fragment)
+    $html += "<h2>Services</h2>"
+    $html += ($report.Services | ConvertTo-Html -Fragment)
+
+    $page = ConvertTo-Html -Title "Server Health Report" -Head $htmlStyle -Body ($html -join "`n")
+    Set-Content -LiteralPath $ExportHtmlPath -Value $page -Encoding UTF8 -ErrorAction Stop
+    Write-Verbose "HTML report saved to: $ExportHtmlPath"
+}
 
 if ($AsObject) {
     $report

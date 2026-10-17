@@ -208,4 +208,28 @@ Describe "Get-ServerHealth script behavior" {
         }
     }
 
+
+    It "exports a complete HTML report" {
+        $htmlPath = Join-Path $env:TEMP (
+            "health-report-" + [guid]::NewGuid().ToString("N") + ".html"
+        )
+
+        try {
+            & $healthScript -ExportHtmlPath $htmlPath | Out-Null
+
+            Test-Path $htmlPath | Should Be $true
+
+            $html = Get-Content $htmlPath -Raw
+            $html | Should Match '(?i)<html'
+            $html | Should Match '(?i)</html>'
+            $html | Should Match 'http-equiv="refresh"'
+            $html | Should Match 'System Information'
+            $html | Should Match 'Resources'
+            $html | Should Match 'Disks'
+            $html | Should Match 'Services'
+        }
+        finally {
+            Remove-Item $htmlPath -Force -ErrorAction SilentlyContinue
+        }
+    }
 }

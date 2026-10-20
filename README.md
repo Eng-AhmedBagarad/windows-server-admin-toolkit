@@ -55,3 +55,26 @@ To be determined before public distribution.
 
 See the [User Guide](docs/USAGE.md) for prerequisites, installation instructions, script examples, configurable thresholds, health-status interpretation, troubleshooting, and test execution.
 
+
+## Automated Health Reports
+
+The toolkit can generate scheduled server-health reports in JSON, CSV,
+and HTML formats.
+
+- Detailed setup and troubleshooting: [Automated Health Reports](docs/AUTOMATED_HEALTH_REPORTS.md)
+- Generated reports: `reports/latest-server-health.json`,
+  `reports/latest-server-health.csv`, and `reports/latest-server-health.html`
+- Execution log: `reports/scheduled-health-check.log`
+- Scheduled task management: `scripts/Manage-HealthCheckTask.ps1`
+
+Use an elevated PowerShell session if required by your task configuration.
+To inspect the task, run:
+
+```powershell
+Get-ScheduledTask -TaskName "WindowsServerAdminToolkit-HealthCheck"
+Get-ScheduledTaskInfo -TaskName "WindowsServerAdminToolkit-HealthCheck"
+```
+
+On laptops, configure the task's battery settings if it must run while
+unplugged. See the detailed guide for the recommended settings and
+verification steps.

@@ -10,7 +10,7 @@ Provide reliable, reusable, and maintainable tools that help IT administrators m
 
 - **Storage Monitoring:** Report disk capacity, available space, and utilization percentages.
 - **Server Health Assessment:** Collect operating system information, uptime, and selected service status.
-- **Network Diagnostics:** Planned; not yet implemented.
+- **Network Diagnostics:** Implemented; includes local network configuration, gateway reachability, DNS resolution, and TCP connectivity testing.
 - **Operational Reporting:** Generate structured, timestamped reports for troubleshooting and operational review.
 - **Error Handling:** Handle common failures, inaccessible resources, and insufficient permissions with actionable messages.
 - **Validation:** Include repeatable tests and documented expected results.

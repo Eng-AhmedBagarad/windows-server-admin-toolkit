@@ -16,25 +16,110 @@ param(
     [Parameter(Mandatory=$false)]
     [ValidateRange(1, 65535)]
     [int[]]
-    $Port = @(80, 443)
+    $Port = @(80, 443),
 
     [Parameter(Mandatory=$false)]
     [ValidateRange(1, 300)]
     [int]
-    $TimeoutSeconds = 5
+    $TimeoutSeconds = 5,
 
     [string]
-    $ExportCsvPath
+    $ExportCsvPath,
 
     [string]
-    $ExportJsonPath
+    $ExportJsonPath,
 
     [string]
-    $ExportHtmlPath
+    $ExportHtmlPath,
 
     [switch]
     $AsObject
 )
+
+#region Dependency Wrappers (for testability)
+
+function Resolve-DnsName {
+    param(
+        [string]$Hostname,
+        [int]$TimeoutSeconds
+    )
+    try {
+        $task = [System.Net.Dns]::GetHostAddressesAsync($Hostname)
+        $waitResult = $task.Wait(([Timespan]::FromSeconds($TimeoutSeconds)).TotalMilliseconds)
+        if ($waitResult) {
+            return $task.Result
+        }
+        return @()
+    }
+    catch {
+        throw
+    }
+}
+
+function Test-TcpConnection {
+    param(
+        [string]$Hostname,
+        [int]$Port,
+        [int]$TimeoutSeconds
+    )
+    try {
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $asyncResult = $tcpClient.BeginConnect($Hostname, $Port, $null, $null)
+        $waitHandle = $asyncResult.AsyncWaitHandle
+        try {
+            if (-not $waitHandle.WaitOne([Timespan]::FromSeconds($TimeoutSeconds), $false)) {
+                $tcpClient.Close()
+                return @{ Connected = $false; ErrorMessage = 'Timeout' }
+            }
+            $tcpClient.EndConnect($asyncResult)
+            $connected = $true
+        }
+        finally {
+            $waitHandle.Close()
+        }
+        $tcpClient.Close()
+        return @{ Connected = $true; ErrorMessage = $null }
+    }
+    catch {
+        if ($tcpClient -and $tcpClient.Connected) { $tcpClient.Close() }
+        return @{ Connected = $false; ErrorMessage = $_.Exception.Message }
+    }
+}
+
+function Test-ICMPPing {
+    param(
+        [string]$ComputerName,
+        [int]$Count,
+        [int]$TimeoutSeconds
+    )
+    try {
+        $result = Test-Connection -ComputerName $ComputerName -Count $Count -TimeoutSeconds $TimeoutSeconds -ErrorAction SilentlyContinue
+        if ($result) {
+            return @{ Success = $true; ResponseTime = [math]::Round($result.ResponseTime, 2) }
+        }
+        return @{ Success = $false; ResponseTime = $null }
+    }
+    catch {
+        return @{ Success = $false; ResponseTime = $null; Error = $_.Exception.Message }
+    }
+}
+
+function Test-TCPPort {
+    param(
+        [string]$ComputerName,
+        [int]$Port,
+        [int]$TimeoutSeconds
+    )
+    try {
+        $result = Test-NetConnection -ComputerName $ComputerName -Port $Port -WarningLevel SilentlyContinue -InformationLevel Quiet -TimeoutSeconds $TimeoutSeconds
+        return @{ TcpTestSucceeded = $result.TcpTestSucceeded }
+    }
+    catch {
+        return @{ TcpTestSucceeded = $false; Error = $_.Exception.Message }
+    }
+}
+
+#endregion
 
 function Get-LocalNetworkConfig {
     try {
@@ -56,18 +141,18 @@ function Get-DefaultGateways {
         if ($interface.IPv4DefaultGateway) {
             foreach ($gw in $interface.IPv4DefaultGateway) {
                 $gateways += [PSCustomObject]@{
-                    Address = $gw.NextHop
-                    InterfaceAlias = $interface.InterfaceAlias
-                    AddressFamily = 'IPv4'
+                    Address         = $gw.NextHop
+                    InterfaceAlias  = $interface.InterfaceAlias
+                    AddressFamily   = 'IPv4'
                 }
             }
         }
         if ($interface.IPv6DefaultGateway) {
             foreach ($gw in $interface.IPv6DefaultGateway) {
                 $gateways += [PSCustomObject]@{
-                    Address = $gw.NextHop
-                    InterfaceAlias = $interface.InterfaceAlias
-                    AddressFamily = 'IPv6'
+                    Address         = $gw.NextHop
+                    InterfaceAlias  = $interface.InterfaceAlias
+                    AddressFamily   = 'IPv6'
                 }
             }
         }
@@ -81,48 +166,28 @@ function Test-GatewayReachability {
         [string]$AddressFamily,
         [int]$TimeoutSeconds
     )
-    # Try ICMP first (supplemental)
     $icmpResult = $null
     $icmpLatency = $null
-    try {
-        $ping = Test-Connection -ComputerName $GatewayAddress -Count 1 -TimeoutSeconds $TimeoutSeconds -ErrorAction SilentlyContinue
-        if ($ping) {
-            $icmpResult = 'Success'
-            $icmpLatency = [math]::Round($ping.ResponseTime, 2)
-        }
-        else {
-            $icmpResult = 'Failed'
-        }
+    $ping = Test-ICMPPing -ComputerName $GatewayAddress -Count 1 -TimeoutSeconds $TimeoutSeconds
+    if ($ping.Success) {
+        $icmpResult = 'Success'
+        $icmpLatency = $ping.ResponseTime
     }
-    catch {
+    elseif ($ping.Error) {
         $icmpResult = 'Error'
     }
-
-    # Try TCP to a common port (e.g., 80) as a more reliable reachability test
-    $tcpResult = $null
-    $tcpLatency = $null
-    try {
-        $tcpTest = Test-NetConnection -ComputerName $GatewayAddress -Port 80 -WarningLevel SilentlyContinue -InformationLevel Quiet -TimeoutSeconds $TimeoutSeconds
-        if ($tcpTest.TcpTestSucceeded) {
-            $tcpResult = 'Success'
-            # Note: Test-NetConnection does not return latency by default in Quiet mode.
-            # We can do a separate TCP connection measurement if needed, but for simplicity we skip.
-        }
-        else {
-            $tcpResult = 'Failed'
-        }
-    }
-    catch {
-        $tcpResult = 'Error'
+    else {
+        $icmpResult = 'Failed'
     }
 
+    $tcpTest = Test-TCPPort -ComputerName $GatewayAddress -Port 80 -TimeoutSeconds $TimeoutSeconds
+    $tcpResult = if ($tcpTest.TcpTestSucceeded) { 'Success' } elseif ($tcpTest.Error) { 'Error' } else { 'Failed' }
     return [PSCustomObject]@{
-        GatewayAddress = $GatewayAddress
-        AddressFamily = $AddressFamily
-        ICMPStatus = $icmpResult
-        ICMPLatencyMS = $icmpLatency
-        TCPStatus = $tcpResult
-        # TCPLatencyMS is not measured here for simplicity; could be added with a custom TCP socket timing.
+        GatewayAddress  = $GatewayAddress
+        AddressFamily   = $AddressFamily
+        ICMPStatus      = $icmpResult
+        ICMPLatencyMS   = $icmpLatency
+        TCPStatus       = $tcpResult
     }
 }
 
@@ -133,177 +198,169 @@ function Test-DNSResolution {
     )
     $addresses = @()
     $status = "Failed"
-    $resolvedAddresses = @()
     try {
-        $task = [System.Net.Dns]::GetHostAddressesAsync($Hostname)
-        $waitResult = $task.Wait(([Timespan]::FromSeconds($TimeoutSeconds)).Milliseconds)
-        if ($waitResult) {
-            $ips = $task.Result
+        $ips = Resolve-DnsName -Hostname $Hostname -TimeoutSeconds $TimeoutSeconds
+        if ($ips.Count -gt 0) {
             foreach ($ip in $ips) {
                 $addresses += $ip.IPAddressToString
             }
-            if ($addresses.Count -gt 0) {
-                $status = "Success"
-            } else {
-                $status = "Failed"
-            }
-        } else {
-            $status = "Timeout"
+            $status = "Success"
         }
-    } catch {
+        else {
+            $status = "Failed"
+        }
+    }
+    catch {
         $status = "Error"
     }
     return [PSCustomObject]@{
-        Hostname = $Hostname
-        Status = $status
-        ResolvedAddresses = ($addresses -join ", ")
+        Hostname           = $Hostname
+        Status             = $status
+        ResolvedAddresses  = ($addresses -join ", ")
     }
-}function Test-TCPConnectivity {
+}
+
+function Test-TCPConnectivity {
     param(
         [string]$Hostname,
         [int]$Port,
         [int]$TimeoutSeconds
     )
-    $connected = $false
-    $latencyMs = $null
-    $errorMessage = $null
-
-    try {
-        $tcpClient = New-Object System.Net.Sockets.TcpClient
-        $asyncResult = $tcpClient.BeginConnect($Hostname, $Port, $null, $null)
-        $waitHandle = $asyncResult.AsyncWaitHandle
-        try {
-            if (!$waitHandle.WaitOne([Timespan]::FromSeconds($TimeoutSeconds), $false)) {
-                $errorMessage = 'Timeout'
-                $tcpClient.Close()
-                return [PSCustomObject]@{
-                    Hostname = $Hostname
-                    Port = $Port
-                    Connected = $false
-                    LatencyMS = $null
-                    ErrorMessage = $errorMessage
-                }
-            }
-            $tcpClient.EndConnect($asyncResult)
-            $connected = $true
-        }
-        finally {
-            $waitHandle.Close()
-        }
-
-        # Measure latency by timing the connection? We already timed the wait, but we can do a separate measurement.
-        # For simplicity, we'll skip latency measurement for TCP in this version.
-        # We can optionally measure by recording timestamps before and after Connect.
-        $tcpClient.Close()
-    }
-    catch {
-        $errorMessage = $_.Exception.Message
-        if ($tcpClient -and $tcpClient.Connected) { $tcpClient.Close() }
-    }
-
+    $result = Test-TcpConnection -Hostname $Hostname -Port $Port -TimeoutSeconds $TimeoutSeconds
     return [PSCustomObject]@{
-        Hostname = $Hostname
-        Port = $Port
-        Connected = $connected
-        LatencyMS = $latencyMs
-        ErrorMessage = $errorMessage
+        Hostname     = $Hostname
+        Port         = $Port
+        Connected    = $result.Connected
+        LatencyMS    = $null
+        ErrorMessage = $result.ErrorMessage
     }
 }
 
-# Main script body
-try {
+#region Main Logic (exposed for testing)
+
+function Invoke-NetworkDiagnostics {
+    param(
+        [string[]]$ComputerName,
+        [int[]]$Port,
+        [int]$TimeoutSeconds,
+        [string]$ExportCsvPath,
+        [string]$ExportJsonPath,
+        [string]$ExportHtmlPath,
+        [switch]$AsObject
+    )
+
     $generatedAt = Get-Date
 
-    # 1. Local network configuration
     $networkConfig = Get-LocalNetworkConfig
-
-    # 2. Default gateways
     $gateways = Get-DefaultGateways
 
-    # 3. Gateway reachability
     $gatewayResults = @()
     foreach ($gw in $gateways) {
         $result = Test-GatewayReachability -GatewayAddress $gw.Address -AddressFamily $gw.AddressFamily -TimeoutSeconds $TimeoutSeconds
         $gatewayResults += [PSCustomObject]@{
-            GatewayAddress = $gw.Address
-            InterfaceAlias = $gw.InterfaceAlias
-            AddressFamily = $gw.AddressFamily
-            ICMPStatus = $result.ICMPStatus
-            ICMPLatencyMS = $result.ICMPLatencyMS
-            TCPStatus = $result.TCPStatus
+            GatewayAddress  = $gw.Address
+            InterfaceAlias  = $gw.InterfaceAlias
+            AddressFamily   = $gw.AddressFamily
+            ICMPStatus      = $result.ICMPStatus
+            ICMPLatencyMS   = $result.ICMPLatencyMS
+            TCPStatus       = $result.TCPStatus
         }
     }
 
-    # 4. DNS resolution
     $dnsResults = @()
     foreach ($name in $ComputerName) {
         $dnsResults += Test-DNSResolution -Hostname $name -TimeoutSeconds $TimeoutSeconds
     }
 
-    # 5. TCP connectivity
     $tcpResults = @()
     foreach ($name in $ComputerName) {
-        foreach ($port in $Port) {
-            $tcpResults += Test-TCPConnectivity -Hostname $name -Port $port -TimeoutSeconds $TimeoutSeconds
+        foreach ($targetPort in $Port) {
+            $tcpResults += Test-TCPConnectivity -Hostname $name -Port $targetPort -TimeoutSeconds $TimeoutSeconds
         }
     }
 
-    # Build report object
     $report = [PSCustomObject]@{
-        GeneratedAt = $generatedAt
+        GeneratedAt          = $generatedAt
         NetworkConfiguration = $networkConfig
-        Gateways = $gateways
-        GatewayReachability = $gatewayResults
-        DNSResolution = $dnsResults
-        TCPConnectivity = $tcpResults
+        Gateways             = $gateways
+        GatewayReachability  = $gatewayResults
+        DNSResolution        = $dnsResults
+        TCPConnectivity      = $tcpResults
     }
 
-    # Export functionality (similar to existing scripts)
     if ($ExportCsvPath) {
-        # We'll create a flat CSV for each relevant section, or choose one?
-        # For simplicity, we'll export the TCPConnectivity results as CSV since they are structured.
-        # But the requirement says: Optional CSV, JSON, and HTML exports consistent with the existing toolkit.
-        # We'll follow the pattern of Get-TopResourceConsumers which exports a CSV with multiple rankings.
-        # We'll create a CSV that combines all test results in a flat format.
-
         $csvRows = @()
 
-        # Add gateway reachability
+        # Define common schema for all CSV rows to ensure Export-Csv includes all columns
+        # Export-Csv uses the first object's properties as schema, so we ensure all objects have all possible properties
+        $commonProperties = @(
+            'GeneratedAt', 'Category',
+            'GatewayAddress', 'InterfaceAlias', 'AddressFamily', 'ICMPStatus', 'ICMPLatencyMS', 'TCPStatus',
+            'Hostname', 'Status', 'ResolvedAddresses',
+            'Port', 'Connected', 'LatencyMS', 'ErrorMessage'
+        )
+
         foreach ($gw in $gatewayResults) {
-            $csvRows += [PSCustomObject]@{
-                GeneratedAt = $generatedAt
-                Category = 'GatewayReachability'
-                GatewayAddress = $gw.GatewayAddress
-                InterfaceAlias = $gw.InterfaceAlias
-                AddressFamily = $gw.AddressFamily
-                ICMPStatus = $gw.ICMPStatus
-                ICMPLatencyMS = $gw.ICMPLatencyMS
-                TCPStatus = $gw.TCPStatus
+            $row = [PSCustomObject]@{
+                GeneratedAt     = $generatedAt
+                Category        = 'GatewayReachability'
+                GatewayAddress  = $gw.GatewayAddress
+                InterfaceAlias  = $gw.InterfaceAlias
+                AddressFamily   = $gw.AddressFamily
+                ICMPStatus      = $gw.ICMPStatus
+                ICMPLatencyMS   = $gw.ICMPLatencyMS
+                TCPStatus       = $gw.TCPStatus
+                Hostname        = $null
+                Status          = $null
+                ResolvedAddresses = $null
+                Port            = $null
+                Connected       = $null
+                LatencyMS       = $null
+                ErrorMessage    = $null
             }
+            $csvRows += $row | Select-Object $commonProperties
         }
 
-        # Add DNS resolution
         foreach ($dns in $dnsResults) {
-            $csvRows += [PSCustomObject]@{
-                GeneratedAt = $generatedAt
-                Category = 'DNSResolution'
-                Hostname = $dns.Hostname
-                Status = $dns.Status
+            $row = [PSCustomObject]@{
+                GeneratedAt       = $generatedAt
+                Category          = 'DNSResolution'
+                GatewayAddress    = $null
+                InterfaceAlias    = $null
+                AddressFamily     = $null
+                ICMPStatus        = $null
+                ICMPLatencyMS     = $null
+                TCPStatus         = $null
+                Hostname          = $dns.Hostname
+                Status            = $dns.Status
                 ResolvedAddresses = $dns.ResolvedAddresses
+                Port              = $null
+                Connected         = $null
+                LatencyMS         = $null
+                ErrorMessage      = $null
             }
+            $csvRows += $row | Select-Object $commonProperties
         }
 
-        # Add TCP connectivity
         foreach ($tcp in $tcpResults) {
-            $csvRows += [PSCustomObject]@{
-                GeneratedAt = $generatedAt
-                Category = 'TCPConnectivity'
-                Hostname = $tcp.Hostname
-                Port = $tcp.Port
-                Connected = $tcp.Connected
-                LatencyMS = $tcp.LatencyMS
-                ErrorMessage = $tcp.ErrorMessage
+            $row = [PSCustomObject]@{
+                GeneratedAt   = $generatedAt
+                Category      = 'TCPConnectivity'
+                GatewayAddress = $null
+                InterfaceAlias = $null
+                AddressFamily  = $null
+                ICMPStatus     = $null
+                ICMPLatencyMS  = $null
+                TCPStatus      = $null
+                Hostname       = $tcp.Hostname
+                Status         = $null
+                ResolvedAddresses = $null
+                Port           = $tcp.Port
+                Connected      = $tcp.Connected
+                LatencyMS      = $tcp.LatencyMS
+                ErrorMessage   = $tcp.ErrorMessage
             }
+            $csvRows += $row | Select-Object $commonProperties
         }
 
         $csvDirectory = Split-Path -Parent $ExportCsvPath
@@ -326,47 +383,43 @@ try {
     }
 
     if ($ExportHtmlPath) {
-        $htmlStyle = @"
-<meta http-equiv="refresh" content="300">
-<style>
-body { font-family: Arial; margin: 30px; color: #222; }
-h1, h2 { color: #174a7e; }
-table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-th { background: #174a7e; color: white; }
-tr:nth-child(even) { background: #f2f2f2; }
-</style>
-"@
+        $htmlStyleLines = @(
+            '<meta http-equiv="refresh" content="300">'
+            '<style>'
+            'body { font-family: Arial; margin: 30px; color: #222; }'
+            'h1, h2 { color: #174a7e; }'
+            'table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }'
+            'th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }'
+            'th { background: #174a7e; color: white; }'
+            'tr:nth-child(even) { background: #f2f2f2; }'
+            '</style>'
+        )
+        $htmlStyle = $htmlStyleLines -join "`n"
 
         $html = @()
         $html += "<h1>Network Connectivity Report</h1>"
         $html += "<p>Generated: $($report.GeneratedAt)</p>"
 
-        # Network Configuration (simplified)
         if ($report.NetworkConfiguration) {
             $html += "<h2>Network Configuration</h2>"
             $html += ($report.NetworkConfiguration | ConvertTo-Html -Fragment)
         }
 
-        # Gateways
         if ($report.Gateways) {
             $html += "<h2>Default Gateways</h2>"
             $html += ($report.Gateways | ConvertTo-Html -Fragment)
         }
 
-        # Gateway Reachability
         if ($report.GatewayReachability) {
             $html += "<h2>Gateway Reachability</h2>"
             $html += ($report.GatewayReachability | ConvertTo-Html -Fragment)
         }
 
-        # DNS Resolution
         if ($report.DNSResolution) {
             $html += "<h2>DNS Resolution</h2>"
             $html += ($report.DNSResolution | ConvertTo-Html -Fragment)
         }
 
-        # TCP Connectivity
         if ($report.TCPConnectivity) {
             $html += "<h2>TCP Connectivity</h2>"
             $html += ($report.TCPConnectivity | ConvertTo-Html -Fragment)
@@ -381,47 +434,75 @@ tr:nth-child(even) { background: #f2f2f2; }
         return $report
     }
 
-    # Default console output
-    Write-Host "`n=== NETWORK CONFIGURATION ===" -ForegroundColor Cyan
-    if ($networkConfig) {
-        $networkConfig | Format-List InterfaceAlias, IPv4Address, IPv6Address
-    }
-    else {
-        Write-Output "Network configuration unavailable."
-    }
-
-    Write-Host "`n=== DEFAULT GATEWAYS ===" -ForegroundColor Cyan
-    if ($gateways.Count -gt 0) {
-        $gateways | Format-Table InterfaceAlias, AddressFamily, Address -AutoSize
-    }
-    else {
-        Write-Output "No default gateways found."
-    }
-
-    Write-Host "`n=== GATEWAY REACHABILITY ===" -ForegroundColor Cyan
-    if ($gatewayResults.Count -gt 0) {
-        $gatewayResults | Format-Table GatewayAddress, InterfaceAlias, AddressFamily, ICMPStatus, ICMPLatencyMS, TCPStatus -AutoSize
-    }
-    else {
-        Write-Output "Gateway reachability tests not performed."
-    }
-
-    Write-Host "`n=== DNS RESOLUTION ===" -ForegroundColor Cyan
-    if ($dnsResults.Count -gt 0) {
-        $dnsResults | Format-Table Hostname, Status, ResolvedAddresses -AutoSize
-    }
-    else {
-        Write-Output "DNS resolution tests not performed."
-    }
-
-    Write-Host "`n=== TCP CONNECTIVITY ===" -ForegroundColor Cyan
-    if ($tcpResults.Count -gt 0) {
-        $tcpResults | Format-Table Hostname, Port, Connected, LatencyMS, ErrorMessage -AutoSize
-    }
-    else {
-        Write-Output "TCP connectivity tests not performed."
-    }
+    # When not -AsObject, still return the report for pipeline use
+    return $report
 }
-catch {
-    throw "Network connectivity diagnostics failed: $($_.Exception.Message)"
+
+#endregion
+
+# Main script body (only executes when invoked directly, not when dot-sourced for testing)
+# $global:TestMode is set by test file before dot-sourcing to prevent main body execution during tests
+# Check CommandType to distinguish direct invocation (ExternalScript) from dot-sourcing
+$isEntryPoint = ($MyInvocation.MyCommand.CommandType -eq 'ExternalScript') -and ($PSCommandPath -eq $MyInvocation.MyCommand.Definition)
+$isTestMode = $global:TestMode
+if (-not $isTestMode -and $isEntryPoint) {
+    try {
+        $report = Invoke-NetworkDiagnostics `
+            -ComputerName $ComputerName `
+            -Port $Port `
+            -TimeoutSeconds $TimeoutSeconds `
+            -ExportCsvPath $ExportCsvPath `
+            -ExportJsonPath $ExportJsonPath `
+            -ExportHtmlPath $ExportHtmlPath `
+            -AsObject
+
+        if ($AsObject) {
+            # Return report object without console output
+            return $report
+        }
+
+        # Console output for direct invocation (human-readable)
+        Write-Host "`n=== NETWORK CONFIGURATION ===" -ForegroundColor Cyan
+        if ($report.NetworkConfiguration) {
+            $report.NetworkConfiguration | Format-List InterfaceAlias, IPv4Address, IPv6Address
+        }
+        else {
+            Write-Output "Network configuration unavailable."
+        }
+
+        Write-Host "`n=== DEFAULT GATEWAYS ===" -ForegroundColor Cyan
+        if ($report.Gateways.Count -gt 0) {
+            $report.Gateways | Format-Table InterfaceAlias, AddressFamily, Address -AutoSize
+        }
+        else {
+            Write-Output "No default gateways found."
+        }
+
+        Write-Host "`n=== GATEWAY REACHABILITY ===" -ForegroundColor Cyan
+        if ($report.GatewayReachability.Count -gt 0) {
+            $report.GatewayReachability | Format-Table GatewayAddress, InterfaceAlias, AddressFamily, ICMPStatus, ICMPLatencyMS, TCPStatus -AutoSize
+        }
+        else {
+            Write-Output "Gateway reachability tests not performed."
+        }
+
+        Write-Host "`n=== DNS RESOLUTION ===" -ForegroundColor Cyan
+        if ($report.DNSResolution.Count -gt 0) {
+            $report.DNSResolution | Format-Table Hostname, Status, ResolvedAddresses -AutoSize
+        }
+        else {
+            Write-Output "DNS resolution tests not performed."
+        }
+
+        Write-Host "`n=== TCP CONNECTIVITY ===" -ForegroundColor Cyan
+        if ($report.TCPConnectivity.Count -gt 0) {
+            $report.TCPConnectivity | Format-Table Hostname, Port, Connected, LatencyMS, ErrorMessage -AutoSize
+        }
+        else {
+            Write-Output "TCP connectivity tests not performed."
+        }
+    }
+    catch {
+        throw "Network connectivity diagnostics failed: $($_.Exception.Message)"
+    }
 }

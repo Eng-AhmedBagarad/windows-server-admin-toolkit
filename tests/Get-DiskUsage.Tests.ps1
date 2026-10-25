@@ -1,7 +1,9 @@
-﻿
-$diskScript = Join-Path $PSScriptRoot "..\scripts\Get-DiskUsage.ps1"
+﻿Describe "Get-DiskUsage script behavior" {
+    BeforeEach {
+        $diskScript = Join-Path $PSScriptRoot "..\scripts\Get-DiskUsage.ps1"
+        $diskScript = Resolve-Path $diskScript
+    }
 
-Describe "Get-DiskUsage script behavior" {
     It "returns Healthy for a disk below the warning threshold" {
         Mock Get-CimInstance {
             [PSCustomObject]@{
@@ -14,11 +16,11 @@ Describe "Get-DiskUsage script behavior" {
 
         $result = @(& $diskScript)
 
-        $result.Count | Should Be 1
-        $result[0].Drive | Should Be "X:"
-        $result[0].UsedGB | Should Be 70
-        $result[0].UsedPercent | Should Be 70
-        $result[0].HealthStatus | Should Be "Healthy"
+        $result.Count | Should -Be 1
+        $result[0].Drive | Should -Be "X:"
+        $result[0].UsedGB | Should -Be 70
+        $result[0].UsedPercent | Should -Be 70
+        $result[0].HealthStatus | Should -Be "Healthy"
     }
 
     It "returns Warning at the warning threshold" {
@@ -33,8 +35,8 @@ Describe "Get-DiskUsage script behavior" {
 
         $result = @(& $diskScript)
 
-        $result[0].UsedPercent | Should Be 80
-        $result[0].HealthStatus | Should Be "Warning"
+        $result[0].UsedPercent | Should -Be 80
+        $result[0].HealthStatus | Should -Be "Warning"
     }
 
     It "returns Critical at the critical threshold" {
@@ -49,8 +51,8 @@ Describe "Get-DiskUsage script behavior" {
 
         $result = @(& $diskScript)
 
-        $result[0].UsedPercent | Should Be 90
-        $result[0].HealthStatus | Should Be "Critical"
+        $result[0].UsedPercent | Should -Be 90
+        $result[0].HealthStatus | Should -Be "Critical"
     }
 
     It "supports custom thresholds" {
@@ -67,12 +69,12 @@ Describe "Get-DiskUsage script behavior" {
             & $diskScript -WarningThreshold 70 -CriticalThreshold 85
         )
 
-        $result[0].HealthStatus | Should Be "Warning"
+        $result[0].HealthStatus | Should -Be "Warning"
     }
 
     It "rejects invalid threshold ordering" {
         {
             & $diskScript -WarningThreshold 90 -CriticalThreshold 80
-        } | Should Throw
+        } | Should -Throw
     }
 }

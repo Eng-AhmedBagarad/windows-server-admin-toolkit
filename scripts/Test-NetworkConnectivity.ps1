@@ -38,23 +38,27 @@ param(
 
 #region Dependency Wrappers (for testability)
 
+
 function Resolve-DnsName {
     param(
         [string]$Hostname,
         [int]$TimeoutSeconds
     )
-    try {
-        $task = [System.Net.Dns]::GetHostAddressesAsync($Hostname)
-        $waitResult = $task.Wait(([Timespan]::FromSeconds($TimeoutSeconds)).TotalMilliseconds)
-        if ($waitResult) {
-            return $task.Result
-        }
-        return @()
+
+    $task = [System.Net.Dns]::GetHostAddressesAsync($Hostname)
+    $waitResult = $task.Wait(
+        [TimeSpan]::FromSeconds($TimeoutSeconds).TotalMilliseconds
+    )
+
+    if (-not $waitResult) {
+        throw [System.TimeoutException]::new(
+            "DNS resolution timed out for '$Hostname' after $TimeoutSeconds seconds."
+        )
     }
-    catch {
-        throw
-    }
+
+    return $task.GetAwaiter().GetResult()
 }
+
 
 function Test-TcpConnection {
     param(
@@ -211,7 +215,12 @@ function Test-DNSResolution {
         }
     }
     catch {
-        $status = "Error"
+        if ($_.Exception -is [System.TimeoutException]) {
+            $status = "Timeout"
+        }
+        else {
+            $status = "Error"
+        }
     }
     return [PSCustomObject]@{
         Hostname           = $Hostname

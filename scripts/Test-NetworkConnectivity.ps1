@@ -85,9 +85,38 @@ function Test-TcpConnection {
         return @{ Connected = $true; ErrorMessage = $null }
     }
     catch {
-        if ($tcpClient -and $tcpClient.Connected) { $tcpClient.Close() }
-        return @{ Connected = $false; ErrorMessage = $_.Exception.Message }
+    if ($tcpClient) {
+        $tcpClient.Close()
     }
+
+    $exception = $_.Exception
+    while ($exception.InnerException) {
+        $exception = $exception.InnerException
+    }
+
+    $errorMessage = switch -Regex ($exception.Message) {
+        'actively refused|No connection could be made' {
+            'Connection refused — no service is listening on this port.'
+            break
+        }
+        'timed out|timeout' {
+            'Connection timed out.'
+            break
+        }
+        'No such host is known|could not be resolved|name resolution' {
+            'Hostname could not be resolved.'
+            break
+        }
+        default {
+            $exception.Message
+        }
+    }
+
+    return @{
+        Connected    = $false
+        ErrorMessage = $errorMessage
+    }
+}
 }
 
 function Test-ICMPPing {

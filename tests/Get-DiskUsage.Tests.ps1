@@ -77,4 +77,40 @@
             & $diskScript -WarningThreshold 90 -CriticalThreshold 80
         } | Should -Throw
     }
+
+    It "warns and returns nothing when no local fixed drives are found" {
+        Mock Get-CimInstance { } -ParameterFilter { $ClassName -eq "Win32_LogicalDisk" }
+        Mock Write-Warning { }
+
+        $result = @(& $diskScript)
+
+        $result.Count | Should -Be 0
+        Assert-MockCalled Write-Warning -Exactly 1 -Scope It
+    }
+
+    It "skips disks with unavailable capacity information" {
+        Mock Get-CimInstance {
+            @(
+                [PSCustomObject]@{
+                    DeviceID = "X:"
+                    VolumeName = "Test"
+                    Size = 100GB
+                    FreeSpace = 30GB
+                },
+                [PSCustomObject]@{
+                    DeviceID = "Y:"
+                    VolumeName = "Unknown"
+                    Size = $null
+                    FreeSpace = $null
+                }
+            )
+        } -ParameterFilter { $ClassName -eq "Win32_LogicalDisk" }
+        Mock Write-Warning { }
+
+        $result = @(& $diskScript)
+
+        $result.Count | Should -Be 1
+        $result[0].Drive | Should -Be "X:"
+        Assert-MockCalled Write-Warning -Exactly 1 -Scope It
+    }
 }

@@ -8,7 +8,7 @@ This guide explains how to run the toolkit's PowerShell scripts, interpret their
 - Windows PowerShell 5.1 for the currently tested environment.
 - Access to the project files.
 - Permission to query the system information required by each check.
-- Pester 3.4.0 or a compatible version for running the existing test suite.
+- Pester 3.4.0 or Pester 5.x for running the existing test suite.
 
 The scripts are diagnostic tools. Run them on the computer you want to inspect.
 
@@ -230,7 +230,108 @@ $report = .\scripts\Get-ServerHealth.ps1 `
     -AsObject `
     -ExportJsonPath ".\reports\health-report.json"
 ```
-## 6. Run the Tests
+
+## 6. Run Network Diagnostics
+
+Run:
+
+```powershell
+.\scripts\Test-NetworkConnectivity.ps1
+```
+
+The script reports local network configuration, gateway reachability, DNS resolution, and TCP connectivity. It is read-only and does not modify system state.
+
+### Parameters
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `ComputerName` | `localhost`, `127.0.0.1` | Hostnames or IP addresses to test. |
+| `Port` | `80`, `443` | TCP ports to test on each host. |
+| `TimeoutSeconds` | `5` | Timeout in seconds for each connection attempt. |
+| `ExportCsvPath` | (none) | Path to save a flat CSV report. |
+| `ExportJsonPath` | (none) | Path to save a JSON report. |
+| `ExportHtmlPath` | (none) | Path to save an HTML report. |
+| `AsObject` | (switch) | Return a structured report object instead of console output. |
+
+### Console output
+
+Without `-AsObject`, the script prints five sections to the console:
+
+- `=== NETWORK CONFIGURATION ===`
+- `=== DEFAULT GATEWAYS ===`
+- `=== GATEWAY REACHABILITY ===`
+- `=== DNS RESOLUTION ===`
+- `=== TCP CONNECTIVITY ===`
+
+### Return structured data
+
+Use `-AsObject` when another PowerShell command or script needs to consume the report:
+
+```powershell
+$report = .\scripts\Test-NetworkConnectivity.ps1 -AsObject
+
+$report.GeneratedAt
+$report.NetworkConfiguration
+$report.Gateways
+$report.GatewayReachability
+$report.DNSResolution
+$report.TCPConnectivity
+```
+
+### Export reports
+
+The script can save CSV, JSON, and HTML reports. The output directory must already exist.
+
+```powershell
+.\scripts\Test-NetworkConnectivity.ps1 `
+    -ExportCsvPath ".\reports\network-report.csv" `
+    -ExportJsonPath ".\reports\network-report.json" `
+    -ExportHtmlPath ".\reports\network-report.html"
+```
+
+## 7. Check Top Resource Consumers
+
+Run:
+
+```powershell
+.\scripts\Get-TopResourceConsumers.ps1
+```
+
+The script samples process CPU, memory, and I/O over a configurable interval and reports the top consumers in each category. It is read-only and does not modify system state.
+
+### Parameters
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `SampleSeconds` | `2` | Number of seconds to sample process activity. |
+| `Top` | `10` | Number of top processes to report per category. |
+| `ExportCsvPath` | (none) | Path to save a CSV report. |
+| `ExportJsonPath` | (none) | Path to save a JSON report. |
+| `ExportHtmlPath` | (none) | Path to save an HTML report. |
+
+### Console output
+
+The script prints four sections to the console:
+
+- `=== TOP CPU PROCESSES ===`
+- `=== TOP MEMORY PROCESSES ===`
+- `=== TOP PROCESS I/O READERS ===`
+- `=== TOP PROCESS I/O WRITERS ===`
+
+### Export reports
+
+The script can save CSV, JSON, and HTML reports. The output directory must already exist.
+
+```powershell
+.\scripts\Get-TopResourceConsumers.ps1 `
+    -SampleSeconds 2 `
+    -Top 10 `
+    -ExportCsvPath ".\reports\resource-consumers.csv" `
+    -ExportJsonPath ".\reports\resource-consumers.json" `
+    -ExportHtmlPath ".\reports\resource-consumers.html"
+```
+
+## 8. Run the Tests
 
 From the repository root, run the full test suite:
 
@@ -250,11 +351,11 @@ To run only server-health tests:
 Invoke-Pester .\tests\Get-ServerHealth.Tests.ps1
 ```
 
-Install Pester only if it is not already available and you are authorized to install PowerShell modules. The current test suite was validated with Pester 3.4.0.
+Install Pester only if it is not already available and you are authorized to install PowerShell modules. The current test suite was validated with Pester 3.4.0 or Pester 5.x.
 
 Tests use mocked system data for repeatable checks. Passing tests does not by itself certify every Windows version or production environment.
 
-## 7. Troubleshooting
+## 9. Troubleshooting
 
 ### Access denied or collection errors
 
@@ -279,7 +380,7 @@ Check the service name and the server's intended role. Missing services are repo
 
 Inspect the individual CPU, RAM, disk, and service results to identify the check responsible for the status. For disk warnings or critical results, review free capacity and investigate disk usage before deleting files.
 
-## 8. Safety and Limitations
+## 10. Safety and Limitations
 
 - These scripts are intended for read-only diagnostics.
 - They do not intentionally change system configuration.
@@ -287,9 +388,9 @@ Inspect the individual CPU, RAM, disk, and service results to identify the check
 - Default service checks are examples, not universal requirements for every server role.
 - Health thresholds are configurable indicators; they should be adjusted to the workload and operational requirements.
 - Validate results in your own environment before relying on them for production monitoring.
-- The current `scripts` directory contains disk-capacity and server-health scripts. Other capabilities mentioned in the project overview may not yet have an implementation.
+- The `scripts` directory contains disk-capacity, server-health, network diagnostics, and top resource consumer scripts.
 
-## 9. Common Commands
+## 11. Common Commands
 
 | Task | Command |
 | --- | --- |
@@ -297,4 +398,7 @@ Inspect the individual CPU, RAM, disk, and service results to identify the check
 | Check server health | `.\scripts\Get-ServerHealth.ps1` |
 | Get a structured report | `.\scripts\Get-ServerHealth.ps1 -AsObject` |
 | Check selected services | `.\scripts\Get-ServerHealth.ps1 -ServiceName "EventLog","Spooler"` |
+| Run network diagnostics | `.\scripts\Test-NetworkConnectivity.ps1` |
+| Get structured network report | `.\scripts\Test-NetworkConnectivity.ps1 -AsObject` |
+| Check top resource consumers | `.\scripts\Get-TopResourceConsumers.ps1` |
 | Run all tests | `Invoke-Pester .\tests` |

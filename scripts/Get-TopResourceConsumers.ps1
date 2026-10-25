@@ -220,6 +220,3 @@ $($report.TopIOWrite | ConvertTo-Html -Fragment)
 
 # Return the complete report for pipelines and automation.
 $report
-
-
-

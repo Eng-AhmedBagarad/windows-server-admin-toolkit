@@ -563,5 +563,3 @@ if (-not $isTestMode -and $isEntryPoint) {
         throw "Network connectivity diagnostics failed: $($_.Exception.Message)"
     }
 }
-
-

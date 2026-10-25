@@ -97,7 +97,7 @@ function Test-ICMPPing {
         [int]$TimeoutSeconds
     )
     try {
-        $result = Test-Connection -ComputerName $ComputerName -Count $Count -TimeoutSeconds $TimeoutSeconds -ErrorAction SilentlyContinue
+        $result = Test-Connection -ComputerName $ComputerName -Count $Count -ErrorAction SilentlyContinue
         if ($result) {
             return @{ Success = $true; ResponseTime = [math]::Round($result.ResponseTime, 2) }
         }
@@ -480,7 +480,7 @@ if (-not $isTestMode -and $isEntryPoint) {
         }
 
         Write-Host "`n=== DEFAULT GATEWAYS ===" -ForegroundColor Cyan
-        if ($report.Gateways.Count -gt 0) {
+        if (@($report.Gateways).Count -gt 0) {
             $report.Gateways | Format-Table InterfaceAlias, AddressFamily, Address -AutoSize
         }
         else {
@@ -515,3 +515,5 @@ if (-not $isTestMode -and $isEntryPoint) {
         throw "Network connectivity diagnostics failed: $($_.Exception.Message)"
     }
 }
+
+

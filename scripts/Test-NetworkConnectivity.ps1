@@ -108,20 +108,39 @@ function Test-ICMPPing {
     }
 }
 
+
 function Test-TCPPort {
     param(
         [string]$ComputerName,
         [int]$Port,
         [int]$TimeoutSeconds
     )
+
     try {
-        $result = Test-NetConnection -ComputerName $ComputerName -Port $Port -WarningLevel SilentlyContinue -InformationLevel Quiet -TimeoutSeconds $TimeoutSeconds
-        return @{ TcpTestSucceeded = $result.TcpTestSucceeded }
+        $result = Test-TcpConnection `
+            -Hostname $ComputerName `
+            -Port $Port `
+            -TimeoutSeconds $TimeoutSeconds
+
+        $errorMessage = $result.ErrorMessage
+
+        return @{
+            TcpTestSucceeded = [bool]$result.Connected
+            Error = if ($errorMessage -and $errorMessage -ne 'Timeout') {
+                $errorMessage
+            } else {
+                $null
+            }
+        }
     }
     catch {
-        return @{ TcpTestSucceeded = $false; Error = $_.Exception.Message }
+        return @{
+            TcpTestSucceeded = $false
+            Error = $_.Exception.Message
+        }
     }
 }
+
 
 #endregion
 

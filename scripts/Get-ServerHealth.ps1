@@ -68,7 +68,7 @@ $system = [PSCustomObject]@{
     UptimeMinutes   = $uptime.Minutes
 }
 
-# CPU: average two samples
+# CPU: average two samples.
 $cpuPercent = $null
 $cpuStatus = "Unknown"
 
@@ -96,7 +96,7 @@ catch {
     Write-Warning "CPU collection failed: $($_.Exception.Message)"
 }
 
-# RAM
+# RAM.
 $totalKB = $os.TotalVisibleMemorySize
 $availableKB = $os.FreePhysicalMemory
 $usedKB = $totalKB - $availableKB
@@ -127,18 +127,18 @@ else {
 
 $resources = @(
     [PSCustomObject]@{
-        Resource = "CPU"
+        Resource     = "CPU"
         UsagePercent = $cpuPercent
         HealthStatus = $cpuStatus
     }
     [PSCustomObject]@{
-        Resource = "RAM"
+        Resource     = "RAM"
         UsagePercent = $ramUsedPercent
         HealthStatus = $ramStatus
     }
 )
 
-# Disk data is collected by the standalone disk script
+# Disk data is collected by the standalone disk script.
 $disks = @()
 $diskCollectionFailed = $false
 
@@ -160,14 +160,14 @@ catch {
     Write-Warning "Disk collection failed: $($_.Exception.Message)"
 }
 
-# Selected services: defaults are examples, not universal role requirements
+# Selected services: defaults are examples, not universal role requirements.
 $services = foreach ($name in $ServiceName) {
     $service = Get-Service -Name $name -ErrorAction SilentlyContinue
 
     if ($null -eq $service) {
         [PSCustomObject]@{
             ServiceName = $name
-            Status = "NotFound"
+            Status      = "NotFound"
             HealthStatus = "Unknown"
         }
     }
@@ -182,16 +182,15 @@ $services = foreach ($name in $ServiceName) {
         }
 
         [PSCustomObject]@{
-            ServiceName = $service.Name
-            Status = $serviceStatus
+            ServiceName  = $service.Name
+            Status       = $serviceStatus
             HealthStatus = $healthStatus
         }
     }
 }
 
-# Overall status: Critical takes precedence over Warning
+# Overall status: Critical takes precedence over Warning.
 $allStatuses = @($cpuStatus, $ramStatus)
-
 $allStatuses += @($disks | ForEach-Object { $_.HealthStatus })
 $allStatuses += @($services | ForEach-Object { $_.HealthStatus })
 
@@ -213,21 +212,21 @@ else {
 }
 
 $report = [PSCustomObject]@{
-    GeneratedAt = Get-Date
+    GeneratedAt   = Get-Date
     OverallStatus = $overallStatus
-    System = $system
-    Resources = $resources
-    Memory = [PSCustomObject]@{
-        TotalGB = $ramTotalGB
-        UsedGB = $ramUsedGB
+    System        = $system
+    Resources     = $resources
+    Memory        = [PSCustomObject]@{
+        TotalGB     = $ramTotalGB
+        UsedGB      = $ramUsedGB
         AvailableGB = $ramAvailableGB
         UsedPercent = $ramUsedPercent
     }
-    Disks = $disks
+    Disks    = $disks
     Services = @($services)
 }
 
-# Export the complete report as JSON.
+# Export JSON.
 if (-not [string]::IsNullOrWhiteSpace($ExportJsonPath)) {
     $jsonDirectory = Split-Path -Parent $ExportJsonPath
 
@@ -242,7 +241,7 @@ if (-not [string]::IsNullOrWhiteSpace($ExportJsonPath)) {
     Write-Verbose "JSON report saved to: $ExportJsonPath"
 }
 
-# Export a flat table as CSV for Excel and reporting tools.
+# Export CSV.
 if (-not [string]::IsNullOrWhiteSpace($ExportCsvPath)) {
     $csvDirectory = Split-Path -Parent $ExportCsvPath
 
@@ -253,63 +252,63 @@ if (-not [string]::IsNullOrWhiteSpace($ExportCsvPath)) {
     $csvRows = @()
 
     $csvRows += [PSCustomObject]@{
-        GeneratedAt = $report.GeneratedAt
-        ComputerName = $system.ComputerName
+        GeneratedAt   = $report.GeneratedAt
+        ComputerName  = $system.ComputerName
         OverallStatus = $report.OverallStatus
-        Category = "Overall"
-        Name = "Overall Health"
-        Status = $report.OverallStatus
-        UsagePercent = $null
-        Details = ""
+        Category      = "Overall"
+        Name          = "Overall Health"
+        Status        = $report.OverallStatus
+        UsagePercent  = $null
+        Details       = ""
     }
 
     $csvRows += [PSCustomObject]@{
-        GeneratedAt = $report.GeneratedAt
-        ComputerName = $system.ComputerName
+        GeneratedAt   = $report.GeneratedAt
+        ComputerName  = $system.ComputerName
         OverallStatus = $report.OverallStatus
-        Category = "System"
-        Name = $system.OperatingSystem
-        Status = "Information"
-        UsagePercent = $null
-        Details = "Version=$($system.Version); UptimeDays=$($system.UptimeDays)"
+        Category      = "System"
+        Name          = $system.OperatingSystem
+        Status        = "Information"
+        UsagePercent  = $null
+        Details       = "Version=$($system.Version); UptimeDays=$($system.UptimeDays)"
     }
 
     foreach ($resource in $resources) {
         $csvRows += [PSCustomObject]@{
-            GeneratedAt = $report.GeneratedAt
-            ComputerName = $system.ComputerName
+            GeneratedAt   = $report.GeneratedAt
+            ComputerName  = $system.ComputerName
             OverallStatus = $report.OverallStatus
-            Category = "Resource"
-            Name = $resource.Resource
-            Status = $resource.HealthStatus
-            UsagePercent = $resource.UsagePercent
-            Details = ""
+            Category      = "Resource"
+            Name          = $resource.Resource
+            Status        = $resource.HealthStatus
+            UsagePercent  = $resource.UsagePercent
+            Details       = ""
         }
     }
 
     foreach ($disk in $disks) {
         $csvRows += [PSCustomObject]@{
-            GeneratedAt = $report.GeneratedAt
-            ComputerName = $system.ComputerName
+            GeneratedAt   = $report.GeneratedAt
+            ComputerName  = $system.ComputerName
             OverallStatus = $report.OverallStatus
-            Category = "Disk"
-            Name = $disk.Drive
-            Status = $disk.HealthStatus
-            UsagePercent = $disk.UsedPercent
-            Details = "TotalGB=$($disk.TotalGB); FreeGB=$($disk.FreeGB)"
+            Category      = "Disk"
+            Name          = $disk.Drive
+            Status        = $disk.HealthStatus
+            UsagePercent  = $disk.UsedPercent
+            Details       = "TotalGB=$($disk.TotalGB); FreeGB=$($disk.FreeGB)"
         }
     }
 
     foreach ($service in $services) {
         $csvRows += [PSCustomObject]@{
-            GeneratedAt = $report.GeneratedAt
-            ComputerName = $system.ComputerName
+            GeneratedAt   = $report.GeneratedAt
+            ComputerName  = $system.ComputerName
             OverallStatus = $report.OverallStatus
-            Category = "Service"
-            Name = $service.ServiceName
-            Status = $service.HealthStatus
-            UsagePercent = $null
-            Details = "ServiceStatus=$($service.Status)"
+            Category      = "Service"
+            Name          = $service.ServiceName
+            Status        = $service.HealthStatus
+            UsagePercent  = $null
+            Details       = "ServiceStatus=$($service.Status)"
         }
     }
 
@@ -319,13 +318,18 @@ if (-not [string]::IsNullOrWhiteSpace($ExportCsvPath)) {
     Write-Verbose "CSV report saved to: $ExportCsvPath"
 }
 
+# Export HTML.
+if (-not [string]::IsNullOrWhiteSpace($ExportHtmlPath)) {
+    $htmlDirectory = Split-Path -Parent $ExportHtmlPath
 
+    if ($htmlDirectory -and -not (Test-Path -LiteralPath $htmlDirectory -PathType Container)) {
+        throw "HTML export directory does not exist: $htmlDirectory"
+    }
 
-if ($ExportHtmlPath) {
     $htmlStyle = @"
 <meta http-equiv="refresh" content="300">
 <style>
-body { font-family: Arial; margin: 30px; color: #222; }
+body { font-family: Arial, sans-serif; margin: 30px; color: #222; }
 h1, h2 { color: #174a7e; }
 table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -347,8 +351,22 @@ tr:nth-child(even) { background: #f2f2f2; }
     $html += "<h2>Services</h2>"
     $html += ($report.Services | ConvertTo-Html -Fragment)
 
-    $page = ConvertTo-Html -Title "Server Health Report" -Head $htmlStyle -Body ($html -join "`n")
+    $page = @"
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Server Health Report</title>
+$htmlStyle
+</head>
+<body>
+$($html -join "`n")
+</body>
+</html>
+"@
+
     Set-Content -LiteralPath $ExportHtmlPath -Value $page -Encoding UTF8 -ErrorAction Stop
+
     Write-Verbose "HTML report saved to: $ExportHtmlPath"
 }
 

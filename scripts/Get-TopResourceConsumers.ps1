@@ -1,10 +1,12 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [ValidateRange(1, 10)]
     [int]$SampleSeconds = 2,
 
     [ValidateRange(1, 50)]
     [int]$Top = 10,
+
+    [switch]$AsObject,
 
     [string]$ExportCsvPath,
     [string]$ExportJsonPath,
@@ -139,6 +141,7 @@ $report = [PSCustomObject]@{
         Sort-Object IOWriteMBPerSec -Descending | Select-Object -First $Top)
 }
 
+if (-not $AsObject) {
 Write-Host "`n=== TOP CPU PROCESSES ===" -ForegroundColor Cyan
 $report.TopCPU |
     Format-Table ProcessName, ProcessId, CPUPercent, MemoryMB, Services -AutoSize
@@ -218,5 +221,10 @@ $($report.TopIOWrite | ConvertTo-Html -Fragment)
     Write-Host "HTML report exported to: $ExportHtmlPath"
 }
 
-# Return the complete report for pipelines and automation.
-$report
+
+}
+
+# Return structured data only when explicitly requested.
+if ($AsObject) {
+    $report
+}

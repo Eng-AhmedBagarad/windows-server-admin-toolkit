@@ -99,7 +99,7 @@ Describe "Get-TopResourceConsumers process sampling" {
     }
 
     It "returns structured process objects with expected properties" {
-        $result = & $scriptPath -SampleSeconds 1 -Top 5
+        $result = & $scriptPath -SampleSeconds 1 -Top 5 -AsObject
 
         $result | Should -Not -BeNullOrEmpty
         $result.TopCPU | Should -Not -BeNullOrEmpty
@@ -121,7 +121,7 @@ Describe "Get-TopResourceConsumers process sampling" {
     }
 
     It "limits TopCPU results to the specified Top count" {
-        $result = & $scriptPath -SampleSeconds 1 -Top 1
+        $result = & $scriptPath -SampleSeconds 1 -Top 1 -AsObject
 
         @($result.TopCPU).Count | Should -BeLessThan 6
         @($result.TopMemory).Count | Should -BeLessThan 6
@@ -167,13 +167,13 @@ Describe "Get-TopResourceConsumers process sampling" {
             [PSCustomObject]@{ WorkingSet64 = 50MB }
         }
 
-        $result = & $scriptPath -SampleSeconds 1 -Top 5
+        $result = & $scriptPath -SampleSeconds 1 -Top 5 -AsObject
 
         $result.TopCPU | Where-Object { $_.ProcessId -eq 0 } | Should -BeNullOrEmpty
     }
 
     It "reports computer name and sample seconds in output" {
-        $result = & $scriptPath -SampleSeconds 3 -Top 5
+        $result = & $scriptPath -SampleSeconds 3 -Top 5 -AsObject
 
         $result.ComputerName | Should -Be $env:COMPUTERNAME
         $result.SampleSeconds | Should -Be 3

@@ -15,6 +15,16 @@ This toolkit provides IT administrators with reliable, reusable PowerShell scrip
 - **Scheduled health checks:** Automated report generation with JSON/CSV/HTML validation and success/error logging.
 - **Scheduled task management:** Install, uninstall, and query the health-check scheduled task.
 
+## Project Highlights
+
+- **Six PowerShell scripts** for server health, disk capacity, resource consumption, network diagnostics, scheduled health checks, and task management.
+- **Windows PowerShell 5.1 compatible** — no external modules, uses built-in cmdlets and .NET classes.
+- **Read-only diagnostics** — queries system state without modifying configuration.
+- **Structured reporting** — JSON, CSV, and HTML exports from every reporting script.
+- **Configurable thresholds** — warning and critical levels for CPU, RAM, and disk utilization.
+- **43 Pester tests** — mocked, repeatable test suite covering all major scripts.
+- **Scheduled automation** — optional Windows Scheduled Task runs health checks every 5 minutes with SUCCESS/ERROR logging.
+
 ## Core Features
 
 | Feature | Script | Description |
@@ -187,6 +197,104 @@ $result | Format-List
 
 # Uninstall the scheduled task
 .\scripts\Manage-HealthCheckTask.ps1 -Action Uninstall
+```
+
+## Report Preview
+
+The following excerpts show genuine output from the toolkit, with hostnames and machine-specific paths redacted.
+
+### Server health — console output
+
+```text
+=== Overall Health: Critical ===
+Generated: 10/27/2026 06:03:38
+
+=== System Information ===
+
+ComputerName    : [YOUR-COMPUTER-NAME]
+OperatingSystem : Microsoft Windows 11 Pro
+Version         : 10.0.26300
+LastBootTime    : 10/16/2026 12:24:10 AM
+UptimeDays      : 11
+UptimeHours     : 5
+UptimeMinutes   : 39
+
+=== Resource Utilization ===
+
+Resource UsagePercent HealthStatus
+-------- ------------ ------------
+CPU             39.52 Healthy
+RAM             78.67 Healthy
+
+=== Disk Health ===
+
+Drive TotalGB UsedGB FreeGB UsedPercent HealthStatus
+----- ------- ------ ------ ----------- ------------
+C:     247.69 237.71   9.98       95.97 Critical
+D:     327.87 257.17   70.7       78.44 Healthy
+E:     376.94 314.63   62.32       83.47 Warning
+
+=== Selected Service Health ===
+
+ServiceName  Status  HealthStatus
+-----------  ------  ------------
+EventLog     Running Healthy
+LanmanServer Running Healthy
+Dnscache     Running Healthy
+```
+
+### Server health — JSON excerpt (redacted)
+
+```json
+{
+    "OverallStatus": "Critical",
+    "System": {
+        "ComputerName": "[YOUR-COMPUTER-NAME]",
+        "OperatingSystem": "Microsoft Windows 11 Pro",
+        "Version": "10.0.26300",
+        "UptimeDays": 11,
+        "UptimeHours": 5,
+        "UptimeMinutes": 39
+    },
+    "Resources": [
+        { "Resource": "CPU", "UsagePercent": 39.52, "HealthStatus": "Healthy" },
+        { "Resource": "RAM", "UsagePercent": 78.67, "HealthStatus": "Healthy" }
+    ],
+    "Disks": [
+        { "Drive": "C:", "TotalGB": 247.69, "UsedGB": 237.71, "FreeGB": 9.98, "UsedPercent": 95.97, "HealthStatus": "Critical" },
+        { "Drive": "D:", "TotalGB": 327.87, "UsedGB": 257.17, "FreeGB": 70.7, "UsedPercent": 78.44, "HealthStatus": "Healthy" },
+        { "Drive": "E:", "TotalGB": 376.94, "UsedGB": 314.63, "FreeGB": 62.32, "UsedPercent": 83.47, "HealthStatus": "Warning" }
+    ],
+    "Services": [
+        { "ServiceName": "EventLog", "Status": "Running", "HealthStatus": "Healthy" },
+        { "ServiceName": "LanmanServer", "Status": "Running", "HealthStatus": "Healthy" },
+        { "ServiceName": "Dnscache", "Status": "Running", "HealthStatus": "Healthy" }
+    ]
+}
+```
+
+### Resource consumers — console output (3-second sample)
+
+```text
+=== TOP CPU PROCESSES ===
+
+ProcessName ProcessId CPUPercent MemoryMB Services
+----------- --------- ---------- -------- --------
+vmmemWSL         4648          7  2027.88
+WmiPrvSE        29184       3.69    29.95
+svchost          2676        2.6       25 Winmgmt
+MsMpEng          5896       2.18   322.49 WinDefend
+conhost         19728       2.11     9.18
+
+=== TOP MEMORY PROCESSES ===
+
+ProcessName        ProcessId MemoryMB CPUPercent Services
+-----------        --------- -------- ---------- --------
+vmmemWSL                4648  2027.88          7
+Memory Compression      3492   688.75          0
+chrome                 25656   549.48          0
+chrome                 25932   463.56          0
+chrome                 15044   333.67          0
 ```
 
 ## Reports

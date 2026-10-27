@@ -1,80 +1,267 @@
-﻿# Windows Server Administration Toolkit
+# Windows Server Administration Toolkit
 
-A PowerShell-based toolkit for Windows infrastructure operations, server health monitoring, storage capacity management, and network diagnostics.
+A PowerShell-based toolkit for Windows infrastructure operations, server health monitoring, storage capacity management, and network diagnostics. Built for Windows PowerShell 5.1 compatibility, read-only diagnostics, and structured JSON/CSV/HTML reporting.
 
-## Purpose
+## Overview
 
-Provide reliable, reusable, and maintainable tools that help IT administrators monitor Windows infrastructure, identify operational issues, and reduce repetitive manual work.
+This toolkit provides IT administrators with reliable, reusable PowerShell scripts for monitoring Windows servers and workstations. Each script performs read-only diagnostics — no system configuration is changed — and exports structured reports in JSON, CSV, and HTML formats for troubleshooting, operational review, and automated health-check pipelines.
+
+### What it does
+
+- **Server health assessment:** CPU, RAM, disk capacity, OS version, uptime, and selected service status with configurable warning/critical thresholds.
+- **Resource consumer analysis:** Process CPU/memory/I/O sampling over a configurable interval, with top-N rankings and exportable reports.
+- **Network diagnostics:** Local network configuration, gateway reachability, DNS resolution, and TCP connectivity testing.
+- **Disk capacity monitoring:** Per-drive utilization reporting with warning/critical thresholds.
+- **Scheduled health checks:** Automated report generation with JSON/CSV/HTML validation and success/error logging.
+- **Scheduled task management:** Install, uninstall, and query the health-check scheduled task.
 
 ## Core Features
 
-- **Storage Monitoring:** Report disk capacity, available space, and utilization percentages.
-- **Server Health Assessment:** Collect operating system information, uptime, and selected service status.
-- **Network Diagnostics:** Implemented; includes local network configuration, gateway reachability, DNS resolution, and TCP connectivity testing.
-- **Operational Reporting:** Generate structured, timestamped reports for troubleshooting and operational review.
-- **Error Handling:** Handle common failures, inaccessible resources, and insufficient permissions with actionable messages.
-- **Validation:** Include repeatable tests and documented expected results.
+| Feature | Script | Description |
+|---------|--------|-------------|
+| Server health | `Get-ServerHealth.ps1` | CPU, RAM, disk, OS, uptime, and service status with threshold-based health states (Healthy/Warning/Critical/Unknown). Exports JSON, CSV, HTML. |
+| Resource consumers | `Get-TopResourceConsumers.ps1` | Samples process CPU, memory, and I/O over an interval; ranks top consumers per resource type. Exports JSON, CSV, HTML. |
+| Network diagnostics | `Test-NetworkConnectivity.ps1` | Local network config, gateway reachability, DNS resolution, and TCP port connectivity. |
+| Disk capacity | `Get-DiskUsage.ps1` | Per-drive free/used space and utilization percentages with warning/critical thresholds. |
+| Scheduled health | `Invoke-ScheduledHealthCheck.ps1` | Orchestrates health report generation, validates all 3 report outputs, logs SUCCESS/ERROR. |
+| Task management | `Manage-HealthCheckTask.ps1` | Install/Uninstall/Status for the scheduled health-check task. |
 
-## Intended Environments
+### Common capabilities
 
-Designed for Windows workstation and Windows Server environments, including domain-joined infrastructure where supported.
+- **PowerShell 5.1 compatibility** across the toolkit.
+- **Read-only diagnostics** for server health, disk capacity, resource consumption, and network connectivity.
+- **Structured output and report exports** where supported by the individual script.
+- **Automated reporting:** `Invoke-ScheduledHealthCheck.ps1` generates JSON, CSV, and HTML health reports.
+- **Scheduled task management:** `Manage-HealthCheckTask.ps1` supports `-Action Install`, `-Action Uninstall`, and `-Action Status`.
 
-The toolkit is intended for real-world IT operations. Features must be validated before being considered suitable for production use.
+Individual scripts have different parameters; see the usage examples below for each script.
 
-## Runtime Requirements
+## Directory Structure
 
-- Windows PowerShell 5.1 or a compatible PowerShell version, depending on the feature.
-- A supported Windows workstation or Windows Server environment.
-- Appropriate permissions for the requested operations.
-- Network connectivity and management interfaces when required by a feature.
+```
+windows-server-admin-toolkit/
+├── README.md
+├── LICENSE
+├── .gitignore
+├── scripts/
+│   ├── Get-ServerHealth.ps1
+│   ├── Get-TopResourceConsumers.ps1
+│   ├── Test-NetworkConnectivity.ps1
+│   ├── Invoke-ScheduledHealthCheck.ps1
+│   ├── Manage-HealthCheckTask.ps1
+│   └── Get-DiskUsage.ps1
+├── tests/
+│   ├── Get-ServerHealth.Tests.ps1
+│   ├── Get-TopResourceConsumers.Tests.ps1
+│   ├── Test-NetworkConnectivity.Tests.ps1
+│   └── Get-DiskUsage.Tests.ps1
+├── docs/
+│   ├── USAGE.md
+│   └── AUTOMATED_HEALTH_REPORTS.md
+└── reports/              (generated reports — excluded from git)
+```
 
-## Operational Principles
+## Requirements
 
-- Read-only diagnostics by default.
-- Least-privilege execution.
-- No embedded credentials or secrets.
-- Clear error handling and actionable diagnostic output.
-- Documented prerequisites, limitations, and compatibility.
-- Administrative changes require explicit authorization and appropriate validation.
+- **PowerShell:** Windows PowerShell 5.1.
+- **OS:** Windows workstation or Windows Server (domain-joined environments supported where applicable).
+- **Permissions:** Appropriate permissions for the requested operations (e.g., `Get-CimInstance`, `Get-Service`, `Get-Counter`).
+- **Testing:** Pester 5.7.1 (for running the included test suite).
 
-## Testing and Reliability
+No external modules are required. All scripts use built-in PowerShell cmdlets and .NET classes.
 
-Features are validated against documented expected results, including relevant error scenarios and permission requirements.
+## Quick Start
 
-Production readiness is established through testing and documented evidence, not assumed from successful execution in a development environment.
+Run any script directly from PowerShell:
 
-## Project Status
+```powershell
+# Full server health report (console output)
+.\scripts\Get-ServerHealth.ps1
 
-Active development. Features, compatibility, known limitations, and validation results will be documented as the project evolves.
+# Health report with structured object output (for pipeline use)
+.\scripts\Get-ServerHealth.ps1 -AsObject
+
+# Health report exported to JSON, CSV, and HTML
+.\scripts\Get-ServerHealth.ps1 `
+    -ExportJsonPath .\reports\health.json `
+    -ExportCsvPath  .\reports\health.csv  `
+    -ExportHtmlPath .\reports\health.html
+
+# Top resource consumers (5-minute sample, top 10 per resource)
+.\scripts\Get-TopResourceConsumers.ps1 -SampleSeconds 300 -Top 10
+
+# Disk capacity report with custom thresholds
+.\scripts\Get-DiskUsage.ps1 -WarningThreshold 75 -CriticalThreshold 90
+
+# Network diagnostics
+.\scripts\Test-NetworkConnectivity.ps1
+```
+
+## Usage Examples
+
+### Get-ServerHealth.ps1
+
+```powershell
+# Console report with default thresholds (CPU warn 80/crit 95, RAM warn 80/crit 90, disk warn 80/crit 90)
+.\scripts\Get-ServerHealth.ps1
+
+# Custom thresholds
+.\scripts\Get-ServerHealth.ps1 `
+    -CPUWarningThreshold 70 -CPUCriticalThreshold 90 `
+    -RAMWarningThreshold 75 -RAMCriticalThreshold 85 `
+    -DiskWarningThreshold 70 -DiskCriticalThreshold 85
+
+# Monitor specific services
+.\scripts\Get-ServerHealth.ps1 -ServiceName @("Spooler", "EventLog", "LanmanServer")
+
+# Export all three formats for archiving or dashboarding
+.\scripts\Get-ServerHealth.ps1 `
+    -ExportJsonPath .\reports\latest-server-health.json `
+    -ExportCsvPath  .\reports\latest-server-health.csv  `
+    -ExportHtmlPath .\reports\latest-server-health.html
+
+# Get structured output for further processing
+$health = .\scripts\Get-ServerHealth.ps1 -AsObject
+$health.OverallStatus
+$health.Disks | Where-Object { $_.HealthStatus -eq "Critical" }
+```
+
+### Get-TopResourceConsumers.ps1
+
+```powershell
+# Sample for 60 seconds, show top 10 per resource
+.\scripts\Get-TopResourceConsumers.ps1 -SampleSeconds 60 -Top 10
+
+# Quick 5-second snapshot
+.\scripts\Get-TopResourceConsumers.ps1 -SampleSeconds 5 -Top 5
+
+# Export resource rankings to CSV/JSON/HTML
+.\scripts\Get-TopResourceConsumers.ps1 `
+    -SampleSeconds 120 `
+    -Top 20 `
+    -ExportCsvPath .\reports\resources.csv `
+    -ExportJsonPath .\reports\resources.json `
+    -ExportHtmlPath .\reports\resources.html
+
+# Structured output for automation
+$consumers = .\scripts\Get-TopResourceConsumers.ps1 -AsObject -Top 5
+$consumers.TopCPU | Format-Table ProcessName, ProcessId, CPUPercent, MemoryMB -AutoSize
+```
+
+### Test-NetworkConnectivity.ps1
+
+```powershell
+# Full network diagnostic report
+.\scripts\Test-NetworkConnectivity.ps1
+
+# Structured output for automation
+$result = .\scripts\Test-NetworkConnectivity.ps1 -AsObject
+$result | Format-List
+```
+
+### Get-DiskUsage.ps1
+
+```powershell
+# Disk report with default thresholds (warn 80%, crit 90%)
+.\scripts\Get-DiskUsage.ps1
+
+# Custom thresholds
+.\scripts\Get-DiskUsage.ps1 -WarningThreshold 75 -CriticalThreshold 85
+```
+
+### Invoke-ScheduledHealthCheck.ps1
+
+```powershell
+# Generates and validates all three report formats, logs SUCCESS/ERROR
+.\scripts\Invoke-ScheduledHealthCheck.ps1
+```
+
+### Manage-HealthCheckTask.ps1
+
+```powershell
+# Install the scheduled health-check task (runs every 5 minutes)
+.\scripts\Manage-HealthCheckTask.ps1 -Action Install
+
+# Check task status
+.\scripts\Manage-HealthCheckTask.ps1 -Action Status
+
+# Uninstall the scheduled task
+.\scripts\Manage-HealthCheckTask.ps1 -Action Uninstall
+```
+
+## Reports
+
+All exportable scripts generate reports in three formats:
+
+- **JSON** (`ConvertTo-Json`): Machine-readable, suitable for dashboards, APIs, and automation.
+- **CSV** (`Export-Csv`): Tabular data, suitable for spreadsheets and SIEM ingestion.
+- **HTML** (`ConvertTo-Html`): Human-readable with embedded CSS, suitable for email or browser viewing.
+
+Reports are written to the `reports/` directory by the scheduled health check. The `.gitignore` excludes generated reports (except `reports/.gitkeep`) so they are not committed to the repository.
+
+## Scheduled Health Checks
+
+The toolkit includes automated health-check orchestration:
+
+1. `Invoke-ScheduledHealthCheck.ps1` — generates JSON/CSV/HTML health reports, validates all three outputs, cross-checks JSON/CSV status consistency, and logs SUCCESS or ERROR.
+2. `Manage-HealthCheckTask.ps1` — installs/uninstalls/queries the Windows Scheduled Task that runs `Invoke-ScheduledHealthCheck.ps1` every 5 minutes.
+
+See `docs/AUTOMATED_HEALTH_REPORTS.md` for the full setup guide.
+
+## Testing
+
+The toolkit includes **43 Pester tests** across 4 test files, all passing.
+
+Run the full test suite:
+
+```powershell
+# Requires Pester 5.x
+Invoke-Pester -Path ./tests -Output Normal
+```
+
+Individual test files:
+
+```powershell
+Invoke-Pester -Path ./tests/Get-ServerHealth.Tests.ps1 -Output Normal
+Invoke-Pester -Path ./tests/Get-TopResourceConsumers.Tests.ps1 -Output Normal
+Invoke-Pester -Path ./tests/Test-NetworkConnectivity.Tests.ps1 -Output Normal
+Invoke-Pester -Path ./tests/Get-DiskUsage.Tests.ps1 -Output Normal
+```
+
+Tests cover report generation and validation (JSON/CSV/HTML), structured output (`-AsObject`), threshold behavior, process sampling, network diagnostics, disk capacity, and error scenarios.
+
+## Known Limitations
+
+- **PowerShell 5.1 compatibility:** Scripts are written for Windows PowerShell 5.1. Some modern PowerShell 7+ features are not used intentionally.
+- **CPU sampling:** `Get-ServerHealth.ps1` averages two CPU samples 1 second apart, which adds ~1 second of runtime.
+- **Process sampling:** `Get-TopResourceConsumers.ps1` requires a sampling interval (`-SampleSeconds`, default 2s). Processes that exit between CIM query and `Get-Process` may have missing memory data.
+- **Network:** Windows does not provide reliable per-process network traffic through WMI/CIM; this script does not report per-process network usage.
+- **Disk:** `Get-ServerHealth.ps1` delegates disk collection to `Get-DiskUsage.ps1`; if that script fails, disk status is reported as Unknown and factored into the overall status.
+- **C: drive utilization:** On some systems, C: may run at 94–95% capacity, producing an `OverallStatus=Critical`. This is a genuine disk-space warning and is intentionally not suppressed. Free up disk space on C: to resolve.
+
+## Skills & Technologies
+
+- PowerShell (Windows PowerShell 5.1)
+- Pester 5.x unit testing
+- CIM/WMI (`Win32_LogicalDisk`, `Win32_OperatingSystem`, `Win32_Process`, `Win32_Service`)
+- `Get-Counter` performance counters
+- Async DNS resolution (`[System.Net.Dns]::GetHostAddressesAsync`)
+- Async TCP connectivity (`[System.Net.Sockets.TcpClient]` BeginConnect/EndConnect)
+- Windows Scheduled Tasks (`Register-ScheduledTask`, `Get-ScheduledTask`)
+- Structured reporting: JSON (`ConvertTo-Json`), CSV (`Export-Csv`), HTML (`ConvertTo-Html`)
 
 ## License
 
-To be determined before public distribution.
+This project is licensed under the MIT License. See `LICENSE` for details.
 
-## Usage
+## Operational Principles
 
-See the [User Guide](docs/USAGE.md) for prerequisites, installation instructions, script examples, configurable thresholds, health-status interpretation, troubleshooting, and test execution.
+- **Read-only diagnostics by default.** No system configuration is changed.
+- **Least-privilege execution.** Requests only the permissions needed for the operation.
+- **No embedded credentials or secrets.**
+- **Clear error handling** with actionable diagnostic messages.
+- **Documented prerequisites, limitations, and compatibility.**
+- **Administrative changes require explicit authorization** (e.g., scheduled task installation).
 
-
-## Automated Health Reports
-
-The toolkit can generate scheduled server-health reports in JSON, CSV,
-and HTML formats.
-
-- Detailed setup and troubleshooting: [Automated Health Reports](docs/AUTOMATED_HEALTH_REPORTS.md)
-- Generated reports: `reports/latest-server-health.json`,
-  `reports/latest-server-health.csv`, and `reports/latest-server-health.html`
-- Execution log: `reports/scheduled-health-check.log`
-- Scheduled task management: `scripts/Manage-HealthCheckTask.ps1`
-
-Use an elevated PowerShell session if required by your task configuration.
-To inspect the task, run:
-
-```powershell
-Get-ScheduledTask -TaskName "WindowsServerAdminToolkit-HealthCheck"
-Get-ScheduledTaskInfo -TaskName "WindowsServerAdminToolkit-HealthCheck"
-```
-
-On laptops, configure the task's battery settings if it must run while
-unplugged. See the detailed guide for the recommended settings and
-verification steps.
+---
+*Windows Server Administration Toolkit — reliable PowerShell diagnostics for Windows infrastructure.*

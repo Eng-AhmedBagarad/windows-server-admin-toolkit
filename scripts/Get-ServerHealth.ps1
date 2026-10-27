@@ -143,8 +143,10 @@ $disks = @()
 $diskCollectionFailed = $false
 
 try {
+    $diskScript = Join-Path -Path $PSScriptRoot -ChildPath 'Get-DiskUsage.ps1'
+
     $disks = @(
-        & "$PSScriptRoot\Get-DiskUsage.ps1" `
+        & $diskScript `
             -WarningThreshold $DiskWarningThreshold `
             -CriticalThreshold $DiskCriticalThreshold `
             -ErrorAction Stop

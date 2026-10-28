@@ -367,4 +367,19 @@ Describe "Get-ServerHealth script behavior" {
         $svc.Status | Should -Be "StartPending"
         $svc.HealthStatus | Should -Be "Warning"
     }
+    It "rejects an invalid expected service state" {
+    {
+        & $healthScript -ExpectedServiceState @{
+            Spooler = "Stoped"
+        }
+    } | Should -Throw "*Invalid expected state*"
+}
+
+It "accepts a valid expected service state" {
+    {
+        & $healthScript -ExpectedServiceState @{
+            Spooler = "Stopped"
+        } -ErrorAction Stop
+    } | Should -Not -Throw
+}
 }

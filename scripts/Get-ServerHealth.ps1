@@ -1,4 +1,3 @@
-﻿
 <#
 .SYNOPSIS
     Collects and reports system health.
@@ -38,6 +37,24 @@ param(
     [string]$ExportCsvPath,
     [string]$ExportHtmlPath
 )
+
+# Validate expected service states before collecting server data.
+$validServiceStates = @(
+    "Running",
+    "Stopped",
+    "Paused",
+    "StartPending",
+    "StopPending",
+    "ContinuePending",
+    "PausePending"
+)
+
+foreach ($entry in $ExpectedServiceState.GetEnumerator()) {
+    if ([string]::IsNullOrWhiteSpace([string]$entry.Value) -or
+        $validServiceStates -notcontains [string]$entry.Value) {
+        throw "Invalid expected state '$($entry.Value)' for service '$($entry.Key)'. Valid states: $($validServiceStates -join ', ')."
+    }
+}
 
 $thresholdPairs = @(
     @($CPUWarningThreshold, $CPUCriticalThreshold),
@@ -170,8 +187,8 @@ $services = foreach ($name in $ServiceName) {
 
     if ($null -eq $service) {
         [PSCustomObject]@{
-            ServiceName = $name
-            Status      = "NotFound"
+            ServiceName  = $name
+            Status       = "NotFound"
             HealthStatus = "Unknown"
         }
     }
@@ -179,7 +196,14 @@ $services = foreach ($name in $ServiceName) {
         $serviceStatus = $service.Status.ToString()
 
         # Transitional and paused states are always a warning, regardless of expectation.
-        $transitionalStates = @("StartPending", "StopPending", "ContinuePending", "PausePending", "Paused")
+        $transitionalStates = @(
+            "StartPending",
+            "StopPending",
+            "ContinuePending",
+            "PausePending",
+            "Paused"
+        )
+
         if ($transitionalStates -contains $serviceStatus) {
             $healthStatus = "Warning"
         }

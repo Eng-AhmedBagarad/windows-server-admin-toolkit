@@ -42,6 +42,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\Get-DiskUsage
 
 This does not permanently change the machine's execution policy. Follow your organization's security policy; do not bypass organizational restrictions.
 
+The scheduled task created by `Manage-HealthCheckTask.ps1 -Action Install` uses `-ExecutionPolicy Bypass` in its action arguments so the health-check runner can execute under Task Scheduler without requiring a machine-wide execution policy change. This bypass applies only to the scheduled task's PowerShell process, not to interactive sessions.
+
 ## 3. Check Disk Capacity
 
 Run:

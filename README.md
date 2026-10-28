@@ -20,9 +20,9 @@ This toolkit provides IT administrators with reliable, reusable PowerShell scrip
 - **Six PowerShell scripts** for server health, disk capacity, resource consumption, network diagnostics, scheduled health checks, and task management.
 - **Windows PowerShell 5.1 compatible** — no external modules, uses built-in cmdlets and .NET classes.
 - **Read-only diagnostics** — queries system state without modifying configuration.
-- **Structured reporting** — JSON, CSV, and HTML exports from every reporting script.
+- **Structured reporting** — JSON, CSV, and HTML exports from reporting scripts that support it (`Get-ServerHealth.ps1`, `Get-TopResourceConsumers.ps1`, `Test-NetworkConnectivity.ps1`).
 - **Configurable thresholds** — warning and critical levels for CPU, RAM, and disk utilization.
-- **43 Pester tests** — mocked, repeatable test suite covering all major scripts.
+- **69 Pester tests** — mocked, repeatable test suite covering all six scripts.
 - **Scheduled automation** — optional Windows Scheduled Task runs health checks every 5 minutes with SUCCESS/ERROR logging.
 
 ## Core Features
@@ -62,9 +62,11 @@ windows-server-admin-toolkit/
 │   └── Get-DiskUsage.ps1
 ├── tests/
 │   ├── Get-ServerHealth.Tests.ps1
+│   ├── Get-DiskUsage.Tests.ps1
 │   ├── Get-TopResourceConsumers.Tests.ps1
 │   ├── Test-NetworkConnectivity.Tests.ps1
-│   └── Get-DiskUsage.Tests.ps1
+│   ├── Invoke-ScheduledHealthCheck.Tests.ps1
+│   └── Manage-HealthCheckTask.Tests.ps1
 ├── docs/
 │   ├── USAGE.md
 │   └── AUTOMATED_HEALTH_REPORTS.md
@@ -318,7 +320,7 @@ See `docs/AUTOMATED_HEALTH_REPORTS.md` for the full setup guide.
 
 ## Testing
 
-The toolkit includes **43 Pester tests** across 4 test files, all passing.
+The toolkit includes **69 Pester tests** across 6 test files, all passing.
 
 Run the full test suite:
 
@@ -331,9 +333,11 @@ Individual test files:
 
 ```powershell
 Invoke-Pester -Path ./tests/Get-ServerHealth.Tests.ps1 -Output Normal
+Invoke-Pester -Path ./tests/Get-DiskUsage.Tests.ps1 -Output Normal
 Invoke-Pester -Path ./tests/Get-TopResourceConsumers.Tests.ps1 -Output Normal
 Invoke-Pester -Path ./tests/Test-NetworkConnectivity.Tests.ps1 -Output Normal
-Invoke-Pester -Path ./tests/Get-DiskUsage.Tests.ps1 -Output Normal
+Invoke-Pester -Path ./tests/Invoke-ScheduledHealthCheck.Tests.ps1 -Output Normal
+Invoke-Pester -Path ./tests/Manage-HealthCheckTask.Tests.ps1 -Output Normal
 ```
 
 Tests cover report generation and validation (JSON/CSV/HTML), structured output (`-AsObject`), threshold behavior, process sampling, network diagnostics, disk capacity, and error scenarios.

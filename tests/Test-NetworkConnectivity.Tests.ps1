@@ -516,6 +516,111 @@ Describe 'Test-NetworkConnectivity - Direct Invocation (Script Main Body)' {
     }
 }
 
+Describe 'Test-ICMPPing - Ping class timeout (M1 fix)' {
+    BeforeAll {
+        # Dot-source the script directly with TestMode to get the real implementation
+        # (avoids the root BeforeAll mock function that shadows Test-ICMPPing)
+        $scriptPath = Resolve-Path (Join-Path $PSScriptRoot '..\scripts\Test-NetworkConnectivity.ps1')
+        $global:TestMode = $true
+        . $scriptPath
+        $script:RealTestICMPPing = Get-Command Test-ICMPPing -CommandType Function
+        $script:RealSendPing = Get-Command Send-Ping -CommandType Function
+    }
+
+    BeforeEach {
+        $global:TestMockConfig.Clear()
+        Mock Send-Ping -ParameterFilter {
+            $ComputerName -eq 'localhost' -and $TimeoutMilliseconds -eq 5000
+        } {
+            [PSCustomObject]@{
+                Status = [System.Net.NetworkInformation.IPStatus]::Success
+                RoundtripTime = 25
+            }
+        }
+        Mock Send-Ping -ParameterFilter {
+            $ComputerName -eq '10.255.255.255' -and $TimeoutMilliseconds -eq 1000
+        } {
+            [PSCustomObject]@{
+                Status = [System.Net.NetworkInformation.IPStatus]::TimedOut
+                RoundtripTime = 0
+            }
+        }
+        Mock Send-Ping -ParameterFilter {
+            $ComputerName -eq '10.255.255.254' -and $TimeoutMilliseconds -eq 1000
+        } {
+            [PSCustomObject]@{
+                Status = [System.Net.NetworkInformation.IPStatus]::DestinationNetworkUnreachable
+                RoundtripTime = 0
+            }
+        }
+    }
+
+    It 'returns Success when Send-Ping succeeds within configured timeout' {
+        $result = & $script:RealTestICMPPing -ComputerName 'localhost' -Count 1 -TimeoutSeconds 5
+
+        $result.Success | Should -Be $true
+        $result.ResponseTime | Should -Be 25
+        $result.Error | Should -BeNullOrEmpty
+    }
+
+    It 'returns Failure when Send-Ping times out respecting configured timeout' {
+        $result = & $script:RealTestICMPPing -ComputerName '10.255.255.255' -Count 1 -TimeoutSeconds 1
+
+        $result.Success | Should -Be $false
+        $result.ResponseTime | Should -BeNull
+        $result.Error | Should -BeNullOrEmpty
+    }
+
+    It 'returns Failure when host is unreachable within configured timeout' {
+        $result = & $script:RealTestICMPPing -ComputerName '10.255.255.254' -Count 1 -TimeoutSeconds 1
+
+        $result.Success | Should -Be $false
+        $result.ResponseTime | Should -BeNull
+        $result.Error | Should -BeNullOrEmpty
+    }
+
+    It 'sends Count pings and returns Success if any succeed' {
+        $script:callCount = 0
+        Mock Send-Ping -ParameterFilter {
+            $ComputerName -eq 'localhost'
+        } {
+            $script:callCount++
+            if ($script:callCount -eq 1) {
+                [PSCustomObject]@{
+                    Status = [System.Net.NetworkInformation.IPStatus]::TimedOut
+                    RoundtripTime = 0
+                }
+            }
+            else {
+                [PSCustomObject]@{
+                    Status = [System.Net.NetworkInformation.IPStatus]::Success
+                    RoundtripTime = 50
+                }
+            }
+        }
+
+        $result = & $script:RealTestICMPPing -ComputerName 'localhost' -Count 3 -TimeoutSeconds 5
+
+        $result.Success | Should -Be $true
+        $result.ResponseTime | Should -Be 50
+        $script:callCount | Should -Be 3
+    }
+
+    It 'returns Error when Send-Ping throws an exception' {
+        Mock Send-Ping -ParameterFilter {
+            $ComputerName -eq 'invalid.host'
+        } {
+            throw [System.Net.NetworkInformation.PingException]::new('Ping failed')
+        }
+
+        $result = & $script:RealTestICMPPing -ComputerName 'invalid.host' -Count 1 -TimeoutSeconds 5
+
+        $result.Success | Should -Be $false
+        $result.ResponseTime | Should -BeNull
+        $result.Error | Should -Match 'Ping failed'
+    }
+}
+
 AfterAll {
     # Restore original TestMode state
     if ($global:HadTestMode) {

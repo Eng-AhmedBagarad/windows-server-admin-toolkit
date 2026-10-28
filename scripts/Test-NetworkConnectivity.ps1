@@ -39,6 +39,21 @@ param(
 #region Dependency Wrappers (for testability)
 
 
+function Send-Ping {
+    param(
+        [string]$ComputerName,
+        [int]$TimeoutMilliseconds
+    )
+    $ping = New-Object System.Net.NetworkInformation.Ping
+    try {
+        return $ping.Send($ComputerName, $TimeoutMilliseconds)
+    }
+    finally {
+        $ping.Dispose()
+    }
+}
+
+
 function Resolve-DnsName {
     param(
         [string]$Hostname,
@@ -126,9 +141,20 @@ function Test-ICMPPing {
         [int]$TimeoutSeconds
     )
     try {
-        $result = Test-Connection -ComputerName $ComputerName -Count $Count -ErrorAction SilentlyContinue
-        if ($result) {
-            return @{ Success = $true; ResponseTime = [math]::Round($result.ResponseTime, 2) }
+        $anySucceeded = $false
+        $lastResponseTime = $null
+        $timeoutMs = [int]($TimeoutSeconds * 1000)
+
+        for ($i = 0; $i -lt $Count; $i++) {
+            $reply = Send-Ping -ComputerName $ComputerName -TimeoutMilliseconds $timeoutMs
+            if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+                $anySucceeded = $true
+                $lastResponseTime = [math]::Round($reply.RoundtripTime, 2)
+            }
+        }
+
+        if ($anySucceeded) {
+            return @{ Success = $true; ResponseTime = $lastResponseTime }
         }
         return @{ Success = $false; ResponseTime = $null }
     }

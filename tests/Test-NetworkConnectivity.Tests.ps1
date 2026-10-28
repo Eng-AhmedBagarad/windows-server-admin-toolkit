@@ -621,6 +621,40 @@ Describe 'Test-ICMPPing - Ping class timeout (M1 fix)' {
     }
 }
 
+Describe 'Test-NetworkConnectivity - Entry-point guard (dot-sourcing)' {
+    BeforeAll {
+        $scriptPath = Join-Path $PSScriptRoot '..\scripts\Test-NetworkConnectivity.ps1'
+        $scriptPath = Resolve-Path $scriptPath
+        $script:GuardScriptPath = $scriptPath
+    }
+
+    BeforeEach {
+        # Disable TestMode so the guard would allow main body IF CommandType check were wrong
+        $global:TestMode = $false
+        $script:InvokeNetworkDiagnosticsCalled = $false
+    }
+
+    It 'does not execute main body when dot-sourced (CommandType is Script, not ExternalScript)' {
+        # Define a dummy Invoke-NetworkDiagnostics to detect if main body runs
+        function global:Invoke-NetworkDiagnostics {
+            $script:InvokeNetworkDiagnosticsCalled = $true
+        }
+
+        # Dot-source: CommandType is 'Script', so $isEntryPoint = $false even without TestMode
+        . $script:GuardScriptPath
+
+        # Main body must not have executed
+        $script:InvokeNetworkDiagnosticsCalled | Should -Be $false
+
+        # Functions should still be defined (dot-sourcing worked)
+        (Get-Command Get-LocalNetworkConfig -CommandType Function -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty
+        (Get-Command Invoke-NetworkDiagnostics -CommandType Function -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty
+
+        # Clean up the dummy function
+        Remove-Item function:\Invoke-NetworkDiagnostics -ErrorAction SilentlyContinue
+    }
+}
+
 AfterAll {
     # Restore original TestMode state
     if ($global:HadTestMode) {

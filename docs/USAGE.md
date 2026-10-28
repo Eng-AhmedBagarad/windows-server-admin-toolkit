@@ -8,7 +8,7 @@ This guide explains how to run the toolkit's PowerShell scripts, interpret their
 - Windows PowerShell 5.1 for the currently tested environment.
 - Access to the project files.
 - Permission to query the system information required by each check.
-- Pester 3.4.0 or Pester 5.x for running the existing test suite.
+- Pester 5.x for running the existing test suite.
 
 The scripts are diagnostic tools. Run them on the computer you want to inspect.
 
@@ -351,7 +351,7 @@ To run only server-health tests:
 Invoke-Pester .\tests\Get-ServerHealth.Tests.ps1
 ```
 
-Install Pester only if it is not already available and you are authorized to install PowerShell modules. The current test suite was validated with Pester 3.4.0 or Pester 5.x.
+Install Pester only if it is not already available and you are authorized to install PowerShell modules. The current test suite was validated with Pester 5.x.
 
 Tests use mocked system data for repeatable checks. Passing tests does not by itself certify every Windows version or production environment.
 

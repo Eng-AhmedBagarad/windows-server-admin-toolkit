@@ -525,8 +525,11 @@ function Invoke-NetworkDiagnostics {
 
 # Main script body (only executes when invoked directly, not when dot-sourced for testing)
 # $global:TestMode is set by test file before dot-sourcing to prevent main body execution during tests
-# Check CommandType to distinguish direct invocation (ExternalScript) from dot-sourcing
-$isEntryPoint = ($MyInvocation.MyCommand.CommandType -eq 'ExternalScript') -and ($PSCommandPath -eq $MyInvocation.MyCommand.Definition)
+# Check CommandType to distinguish direct invocation (ExternalScript) from dot-sourcing.
+# $PSCommandPath vs $MyInvocation.MyCommand.Definition comparison is brittle (path format
+# differences, symlinks, resolution edge cases); CommandType alone reliably distinguishes
+# direct invocation (ExternalScript) from dot-sourcing (Script).
+$isEntryPoint = $MyInvocation.MyCommand.CommandType -eq 'ExternalScript'
 $isTestMode = $global:TestMode
 if (-not $isTestMode -and $isEntryPoint) {
     try {

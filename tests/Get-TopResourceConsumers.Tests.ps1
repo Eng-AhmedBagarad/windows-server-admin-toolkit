@@ -179,4 +179,85 @@ Describe "Get-TopResourceConsumers process sampling" {
         $result.SampleSeconds | Should -Be 3
         $result.LogicalProcessors | Should -BeGreaterThan 0
     }
+
+    It "handles a process that appears during sampling (not in first sample)" {
+        $script:cimCallCount = 0
+
+        $existingProcess = [PSCustomObject]@{
+            ProcessId           = 1234
+            Name                = "existingproc.exe"
+            KernelModeTime      = 50000000
+            UserModeTime        = 50000000
+            ReadTransferCount   = 1000000
+            WriteTransferCount  = 2000000
+            ThreadCount         = 10
+            HandleCount         = 100
+            ExecutablePath      = "C:\Windows\existingproc.exe"
+        }
+
+        $newProcess = [PSCustomObject]@{
+            ProcessId           = 5678
+            Name                = "newproc.exe"
+            KernelModeTime      = 30000000
+            UserModeTime        = 30000000
+            ReadTransferCount   = 500000
+            WriteTransferCount  = 1000000
+            ThreadCount         = 5
+            HandleCount         = 50
+            ExecutablePath      = "C:\Windows\newproc.exe"
+        }
+
+        Mock Get-CimInstance {
+            $script:cimCallCount++
+            if ($ClassName -eq "Win32_Process") {
+                if ($script:cimCallCount -eq 1) {
+                    # First sample: only the existing process
+                    @($existingProcess)
+                }
+                else {
+                    # Second sample: existing process + new process that appeared during sampling
+                    @($existingProcess, $newProcess)
+                }
+            }
+            elseif ($ClassName -eq "Win32_Service") {
+                @()
+            }
+        }
+
+        Mock Get-Process {
+            param($Id)
+            if ($Id -eq 1234) {
+                [PSCustomObject]@{ WorkingSet64 = 50MB }
+            }
+            elseif ($Id -eq 5678) {
+                [PSCustomObject]@{ WorkingSet64 = 30MB }
+            }
+            else {
+                [PSCustomObject]@{ WorkingSet64 = 10MB }
+            }
+        }
+
+        $result = & $scriptPath -SampleSeconds 1 -Top 5 -AsObject
+
+        # New process should appear in TopMemory (MemoryMB is populated from Get-Process)
+        $newProc = @($result.TopMemory | Where-Object { $_.ProcessId -eq 5678 }) | Select-Object -First 1
+        $newProc | Should -Not -BeNullOrEmpty
+        $newProc.ProcessName | Should -Be 'newproc'
+        $newProc.MemoryMB | Should -Be 30
+
+        # New process should have null CPU and I/O rates (no previous sample to compare against)
+        $newProc.CPUPercent | Should -BeNull
+        $newProc.IOReadMBPerSec | Should -BeNull
+        $newProc.IOWriteMBPerSec | Should -BeNull
+
+        # New process should NOT appear in CPU/IO rankings (null rates are filtered out)
+        @($result.TopCPU | Where-Object { $_.ProcessId -eq 5678 }) | Should -BeNullOrEmpty
+        @($result.TopIORead | Where-Object { $_.ProcessId -eq 5678 }) | Should -BeNullOrEmpty
+        @($result.TopIOWrite | Where-Object { $_.ProcessId -eq 5678 }) | Should -BeNullOrEmpty
+
+        # Existing process (in both samples) should have non-null CPU rate
+        $existingProc = @($result.TopCPU | Where-Object { $_.ProcessId -eq 1234 }) | Select-Object -First 1
+        $existingProc | Should -Not -BeNullOrEmpty
+        $existingProc.CPUPercent | Should -Not -BeNullOrEmpty
+    }
 }

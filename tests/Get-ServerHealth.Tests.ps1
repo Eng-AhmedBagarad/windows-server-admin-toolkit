@@ -234,4 +234,137 @@ Describe "Get-ServerHealth script behavior" {
             Remove-Item $htmlPath -Force -ErrorAction SilentlyContinue
         }
     }
+
+    It "reports Healthy for services that are running by default" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter {
+            $ClassName -eq "Win32_LogicalDisk"
+        }
+
+        # Get-Service is already mocked in BeforeEach to return Running for all names.
+
+        $report = & $healthScript -AsObject -ServiceName @("EventLog", "LanmanServer")
+
+        $report.Services[0].HealthStatus | Should -Be "Healthy"
+        $report.Services[1].HealthStatus | Should -Be "Healthy"
+        $report.OverallStatus | Should -Be "Healthy"
+    }
+
+    It "reports Healthy when a service is stopped and expected to be stopped" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter {
+            $ClassName -eq "Win32_LogicalDisk"
+        }
+
+        Mock Get-Service {
+            [PSCustomObject]@{
+                Name = $Name
+                Status = [System.ServiceProcess.ServiceControllerStatus]::Stopped
+            }
+        }
+
+        $report = & $healthScript -AsObject `
+            -ServiceName "Spooler" `
+            -ExpectedServiceState @{ Spooler = "Stopped" }
+
+        $svc = $report.Services | Where-Object { $_.ServiceName -eq "Spooler" } | Select-Object -First 1
+        $svc.Status | Should -Be "Stopped"
+        $svc.HealthStatus | Should -Be "Healthy"
+        $report.OverallStatus | Should -Be "Healthy"
+    }
+
+    It "reports Warning when a service is stopped but expected to run" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter {
+            $ClassName -eq "Win32_LogicalDisk"
+        }
+
+        Mock Get-Service {
+            [PSCustomObject]@{
+                Name = $Name
+                Status = [System.ServiceProcess.ServiceControllerStatus]::Stopped
+            }
+        }
+
+        $report = & $healthScript -AsObject -ServiceName "Spooler"
+
+        $svc = $report.Services | Where-Object { $_.ServiceName -eq "Spooler" } | Select-Object -First 1
+        $svc.Status | Should -Be "Stopped"
+        $svc.HealthStatus | Should -Be "Warning"
+        $report.OverallStatus | Should -Be "Warning"
+    }
+
+    It "reports Warning for a paused service regardless of expected state" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter {
+            $ClassName -eq "Win32_LogicalDisk"
+        }
+
+        Mock Get-Service {
+            [PSCustomObject]@{
+                Name = $Name
+                Status = [System.ServiceProcess.ServiceControllerStatus]::Paused
+            }
+        }
+
+        $report = & $healthScript -AsObject `
+            -ServiceName "Spooler" `
+            -ExpectedServiceState @{ Spooler = "Paused" }
+
+        $svc = $report.Services | Where-Object { $_.ServiceName -eq "Spooler" } | Select-Object -First 1
+        $svc.Status | Should -Be "Paused"
+        $svc.HealthStatus | Should -Be "Warning"
+    }
+
+    It "reports Warning for a service in StartPending regardless of expected state" {
+        Mock Get-CimInstance {
+            [PSCustomObject]@{
+                DeviceID = "X:"
+                VolumeName = "Test"
+                Size = 100GB
+                FreeSpace = 30GB
+            }
+        } -ParameterFilter {
+            $ClassName -eq "Win32_LogicalDisk"
+        }
+
+        Mock Get-Service {
+            [PSCustomObject]@{
+                Name = $Name
+                Status = [System.ServiceProcess.ServiceControllerStatus]::StartPending
+            }
+        }
+
+        $report = & $healthScript -AsObject `
+            -ServiceName "Spooler" `
+            -ExpectedServiceState @{ Spooler = "Running" }
+
+        $svc = $report.Services | Where-Object { $_.ServiceName -eq "Spooler" } | Select-Object -First 1
+        $svc.Status | Should -Be "StartPending"
+        $svc.HealthStatus | Should -Be "Warning"
+    }
 }

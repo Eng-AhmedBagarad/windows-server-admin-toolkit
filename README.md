@@ -126,6 +126,11 @@ Run any script directly from PowerShell:
 # Monitor specific services
 .\scripts\Get-ServerHealth.ps1 -ServiceName @("Spooler", "EventLog", "LanmanServer")
 
+# Monitor specific services, declaring one as expected stopped
+.\scripts\Get-ServerHealth.ps1 `
+    -ServiceName @("EventLog", "LanmanServer", "Telnet") `
+    -ExpectedServiceState @{ Telnet = "Stopped" }
+
 # Export all three formats for archiving or dashboarding
 .\scripts\Get-ServerHealth.ps1 `
     -ExportJsonPath .\reports\latest-server-health.json `

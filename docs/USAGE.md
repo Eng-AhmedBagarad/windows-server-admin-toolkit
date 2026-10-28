@@ -146,7 +146,29 @@ To check different services:
 .\scripts\Get-ServerHealth.ps1 -ServiceName "EventLog","Spooler"
 ```
 
-A service that is running is reported as healthy. A found service that is not running is reported as a warning. A service that cannot be found is reported as unknown.
+Each service is reported with its actual status (`Status`) and an interpreted health state (`HealthStatus`):
+
+| Actual state | HealthStatus |
+| --- | --- |
+| `Running`, matching the expected state | `Healthy` |
+| `Stopped`, but expected to be `Running` | `Warning` |
+| `Stopped`, and expected to be `Stopped` | `Healthy` |
+| `Paused`, `StartPending`, `StopPending`, `ContinuePending`, `PausePending` | `Warning` |
+| Not found | `Unknown` |
+
+A service that cannot be found is reported as `Unknown`. A service that is not in its expected state is reported as `Warning`.
+
+By default every service is expected to be `Running`. Use `-ExpectedServiceState` to declare that a service is expected to be stopped — for example, on a hardened server where unneeded services are disabled — so it is reported as `Healthy` instead of `Warning`.
+
+Example: keep `EventLog` and `LanmanServer` expected running, but mark `Telnet` as expected stopped:
+
+```powershell
+.\scripts\Get-ServerHealth.ps1 `
+    -ServiceName "EventLog","LanmanServer","Telnet" `
+    -ExpectedServiceState @{ Telnet = "Stopped" }
+```
+
+Here `Telnet` reports `Healthy` when it is actually `Stopped`. Any other service that is not `Running` reports `Warning`.
 
 Choose services appropriate for the server's role. A stopped service is not necessarily a fault if it is optional or intentionally disabled.
 

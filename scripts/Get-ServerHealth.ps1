@@ -30,6 +30,8 @@ param(
 
     [string[]]$ServiceName = @("EventLog", "LanmanServer", "Dnscache"),
 
+    [hashtable]$ExpectedServiceState = @{},
+
     [switch]$AsObject,
 
     [string]$ExportJsonPath,
@@ -176,11 +178,25 @@ $services = foreach ($name in $ServiceName) {
     else {
         $serviceStatus = $service.Status.ToString()
 
-        if ($serviceStatus -eq "Running") {
-            $healthStatus = "Healthy"
+        # Transitional and paused states are always a warning, regardless of expectation.
+        $transitionalStates = @("StartPending", "StopPending", "ContinuePending", "PausePending", "Paused")
+        if ($transitionalStates -contains $serviceStatus) {
+            $healthStatus = "Warning"
         }
         else {
-            $healthStatus = "Warning"
+            $expectedState = if ($ExpectedServiceState.ContainsKey($name)) {
+                $ExpectedServiceState[$name]
+            }
+            else {
+                "Running"
+            }
+
+            if ($serviceStatus -eq $expectedState) {
+                $healthStatus = "Healthy"
+            }
+            else {
+                $healthStatus = "Warning"
+            }
         }
 
         [PSCustomObject]@{

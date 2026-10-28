@@ -263,11 +263,16 @@ Describe 'Test-NetworkConnectivity - Test-DNSResolution' {
         $result.Status | Should -Be 'Error'
     }
 
-    It 'returns Failed when DNS resolution times out' {
-        $global:TestMockConfig['Resolve-DnsName_example.com_1'] = @()
+    It 'returns Timeout when DNS resolution times out' {
+        $global:TestMockConfig['Resolve-DnsName_example.com_1'] = {
+            throw [System.TimeoutException]::new(
+                'DNS resolution timed out for example.com after 1 seconds.'
+            )
+        }
 
         $result = Test-DNSResolution -Hostname 'example.com' -TimeoutSeconds 1
-        $result.Status | Should -Be 'Failed'
+        $result.Status | Should -Be 'Timeout'
+        $result.ResolvedAddresses | Should -Be ''
     }
 }
 

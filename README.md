@@ -371,12 +371,19 @@ Tests cover report generation and validation (JSON/CSV/HTML), structured output 
 
 This project is licensed under the MIT License. See `LICENSE` for details.
 
+## Recognition
+
+This project is featured in the XERJ Corpus Hub, an open reference
+library that helps AI coding agents discover and reuse existing code.
+
+[![XERJ Corpus Hub Contributor](https://hub.xerj.org/contributors/Eng-AhmedBagarad/badge.svg)](https://hub.xerj.org/contributors/Eng-AhmedBagarad)
+
 ## Operational Principles
 
 - **Read-only diagnostics by default.** No system configuration is changed.
 - **Least-privilege execution.** Requests only the permissions needed for the operation.
 - **No embedded credentials or secrets.**
-- **Clear error handling** with actionable diagnostic messages.
+- **Clear error handling with actionable diagnostic messages.**
 - **Documented prerequisites, limitations, and compatibility.**
 - **Administrative changes require explicit authorization** (e.g., scheduled task installation).
 
